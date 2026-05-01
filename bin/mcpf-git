@@ -166,7 +166,10 @@ GATES = {
 
 
 def main():
-    ap = argparse.ArgumentParser(add_help=False)
+    # allow_abbrev=False — argparse's default prefix matching otherwise
+    # turns flags like `--all` (`git branch --all`) into `--allow-unsafe`
+    # and silently bypasses the gate.
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     ap.add_argument("--explain", action="store_true")
     ap.add_argument("--allow-unsafe", action="store_true")
     ap.add_argument("--help-mcpf", action="store_true")

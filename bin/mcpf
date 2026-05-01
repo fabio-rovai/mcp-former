@@ -3,17 +3,21 @@
 mcpf — top-level CLI for mcp-former.
 
 Subcommands:
-    plan <target>        introspect target software, emit a Terraform-
-                          style plan against ontologies/<target>.nt
-    apply <target>       run plan and write the result to disk
-    git <git-args>       drive git through the verification gate
+    plan TARGET          introspect target software, emit a Terraform-
+                          style plan against ontologies/TARGET.nt
+    apply TARGET         run plan and write the result to disk
+    git GIT-ARGS         drive git through the verification gate
+    kubectl K8S-ARGS     drive kubectl through the verification gate
 
 Examples:
     mcpf plan git
+    mcpf plan kubectl --llm
     mcpf plan git --apply --reload-daemon
     mcpf plan git --explain
     mcpf git status
     mcpf git --explain branch -D main
+    mcpf kubectl get pods
+    mcpf kubectl --explain delete pod coredns -n kube-system
 
 This is a thin dispatcher; each subcommand is implemented as its own
 mcpf-<sub> script in bin/. Keeps each tool single-purpose and testable
@@ -42,6 +46,9 @@ def main():
         os.execv(target, [target] + rest + ["--apply"])
     if sub == "git":
         target = os.path.join(BIN, "mcpf-git")
+        os.execv(target, [target] + rest)
+    if sub == "kubectl":
+        target = os.path.join(BIN, "mcpf-kubectl")
         os.execv(target, [target] + rest)
 
     print(f"unknown subcommand: {sub}", file=sys.stderr)
