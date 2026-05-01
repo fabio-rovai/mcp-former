@@ -237,7 +237,11 @@ def main():
         if args.explain:
             print(f"{DIM}[mcpf-kubectl] {subcmd} is read-only or "
                   f"un-gated; passing through{NC}", file=sys.stderr)
-        return subprocess.call(["kubectl"] + rest)
+        try:
+            return subprocess.call(["kubectl"] + rest)
+        except FileNotFoundError:
+            print(f"{RED}kubectl not found on PATH.{NC}", file=sys.stderr)
+            return 127
 
     allowed, reason, resp = gate(sub_args)
 
@@ -264,7 +268,11 @@ def main():
     if args.explain:
         print(f"{GREEN}[mcpf-kubectl] PASS{NC} → executing kubectl "
               f"{' '.join(rest)}", file=sys.stderr)
-    return subprocess.call(["kubectl"] + rest)
+    try:
+        return subprocess.call(["kubectl"] + rest)
+    except FileNotFoundError:
+        print(f"{RED}kubectl not found on PATH.{NC}", file=sys.stderr)
+        return 127
 
 
 if __name__ == "__main__":

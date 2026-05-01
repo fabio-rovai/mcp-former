@@ -1,0 +1,26 @@
+# mcp-former gh (GitHub CLI) domain ontology — bundled tier.
+#
+# Conventions:
+#   protected_repo  — repos/orgs that should never be deleted
+#   destructive_op  — gh subcommand+verb pairs that delete data
+
+# Protected repos / orgs — anything matching these is blocked from
+# destructive operations. Format: <name>_repo or <name>_org. The
+# wrapper normalises hyphens to underscores.
+<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
+
+# Destructive gh operations
+<http://tardygrada.org/repo_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/secret_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/ssh_key_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/gpg_key_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/variable_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/cache_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/codespace_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+
+# Mutating but recoverable (logged for symmetry — not currently gated)
+<http://tardygrada.org/workflow_disable> <http://schema.org/is_a> <http://tardygrada.org/mutating_op> .
+<http://tardygrada.org/pr_close> <http://schema.org/is_a> <http://tardygrada.org/mutating_op> .

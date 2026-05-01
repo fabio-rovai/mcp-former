@@ -1,0 +1,218 @@
+#!/usr/bin/env python3
+"""
+mcpf-gh: a verifiable wrapper around the GitHub CLI (`gh`).
+
+gh is high-leverage for LLMs (release management, PR workflows, repo
+ops). Same wrapper pattern as mcpf-git / mcpf-kubectl: route every
+operation through the verification gate before it touches GitHub.
+
+Currently gated subcommands:
+
+    gh repo delete OWNER/NAME      reject if repo is_a protected_repo
+                                    OR (destructive_op repo_delete)
+    gh release delete TAG          reject (release_delete)
+    gh issue delete NUMBER         reject (issue_delete)
+    gh secret delete NAME          reject (secret_delete)
+    gh ssh-key delete ID           reject (ssh_key_delete)
+    gh gpg-key delete ID           reject (gpg_key_delete)
+    gh variable delete NAME        reject (variable_delete)
+    gh cache delete ID             reject (cache_delete)
+    gh codespace delete NAME       reject (codespace_delete)
+
+Read-only subcommands (auth, browse, repo view, pr list, ...) pass
+through unverified.
+
+Use:
+    mcpf-gh repo view owner/repo
+    mcpf-gh repo delete some/sandbox       # passes if not protected
+    mcpf-gh repo delete my-co/main-app     # REJECTED (protected_repo)
+    mcpf-gh --explain release delete v1.0
+    mcpf-gh --allow-unsafe release delete v1.0
+
+Requires the tardygrada daemon and the gh CLI on PATH.
+"""
+import argparse
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+
+SOCK = "/tmp/tardygrada.sock"
+
+GREEN  = "\033[0;32m"
+YELLOW = "\033[1;33m"
+RED    = "\033[0;31m"
+DIM    = "\033[2m"
+NC     = "\033[0m"
+
+
+def daemon_query(claim):
+    if not os.path.exists(SOCK):
+        return None
+    try:
+        s = socket.socket(socket.AF_UNIX)
+        s.connect(SOCK)
+        s.sendall((json.dumps({"cmd": "run", "claim": claim}) + "\n").encode())
+        s.shutdown(socket.SHUT_WR)
+        buf = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk: break
+            buf += chunk
+        s.close()
+        return json.loads(buf.decode().strip())
+    except Exception:
+        return None
+
+
+def claim_grounded(claim):
+    resp = daemon_query(claim)
+    if not resp:
+        return False, resp
+    if resp.get("result") != "VERIFIED":
+        return False, resp
+    for t in resp.get("triples", []):
+        if t.get("status") == "grounded":
+            return True, resp
+    return False, resp
+
+
+def normalize(name):
+    """gh uses hyphens and slashes; ontology stores underscores."""
+    return re.sub(r"[^a-zA-Z0-9]", "_", name)
+
+
+def extract_positional(args):
+    """Skip flags + their values."""
+    out = []
+    skip_next = False
+    valued = {"-R", "--repo", "-b", "--body", "-t", "--title",
+              "-F", "--body-file", "-a", "--assignee", "-l", "--label"}
+    for a in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if a in valued:
+            skip_next = True
+            continue
+        if a.startswith("-"):
+            continue
+        out.append(a)
+    return out
+
+
+# ----------------------------------------------------------------------
+# Per-subcommand+verb gates.  gh dispatches "noun verb": e.g. `gh repo
+# delete X` or `gh release delete X`. We gate by (noun, verb).
+# ----------------------------------------------------------------------
+
+def gate_two_word(noun, verb_args):
+    """Generic: check for `delete` verb, look up <noun>_delete in
+    destructive_op, plus per-noun protections."""
+    if not verb_args:
+        return True, f"gh {noun} (no verb)", None
+    verb = verb_args[0]
+    verb_rest = verb_args[1:]
+
+    # Verb-level destructive_op check
+    if verb in ("delete", "remove"):
+        op_name = f"{noun}_delete"
+        ok, resp = claim_grounded(f"{op_name} is a destructive_op")
+        if ok:
+            return False, f"gh {noun} {verb} is a destructive_op", resp
+
+        # Resource-name protection: each positional after the verb is
+        # a target (e.g. owner/repo, tag name, issue number).
+        for tgt in extract_positional(verb_rest):
+            tgt_norm = normalize(tgt)
+            ok, resp = claim_grounded(f"{tgt_norm} is a protected_repo")
+            if ok:
+                return False, f"{tgt} is_a protected_repo", resp
+    return True, f"gh {noun} {verb}", None
+
+
+def gate_repo(args):     return gate_two_word("repo", args)
+def gate_release(args):  return gate_two_word("release", args)
+def gate_issue(args):    return gate_two_word("issue", args)
+def gate_secret(args):   return gate_two_word("secret", args)
+def gate_ssh_key(args):  return gate_two_word("ssh_key", args)
+def gate_gpg_key(args):  return gate_two_word("gpg_key", args)
+def gate_variable(args): return gate_two_word("variable", args)
+def gate_cache(args):    return gate_two_word("cache", args)
+def gate_codespace(args):return gate_two_word("codespace", args)
+
+
+GATES = {
+    "repo":      gate_repo,
+    "release":   gate_release,
+    "issue":     gate_issue,
+    "secret":    gate_secret,
+    "ssh-key":   gate_ssh_key,
+    "gpg-key":   gate_gpg_key,
+    "variable":  gate_variable,
+    "cache":     gate_cache,
+    "codespace": gate_codespace,
+}
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    ap.add_argument("--explain", action="store_true")
+    ap.add_argument("--allow-unsafe", action="store_true")
+    ap.add_argument("--help-mcpf", action="store_true")
+    args, rest = ap.parse_known_args()
+
+    if args.help_mcpf or not rest:
+        print(__doc__)
+        return 0
+
+    subcmd = rest[0]
+    sub_args = rest[1:]
+
+    gate = GATES.get(subcmd)
+    if gate is None:
+        if args.explain:
+            print(f"{DIM}[mcpf-gh] {subcmd} is read-only or "
+                  f"un-gated; passing through{NC}", file=sys.stderr)
+        try:
+            return subprocess.call(["gh"] + rest)
+        except FileNotFoundError:
+            print(f"{RED}gh CLI not found on PATH.{NC}", file=sys.stderr)
+            return 127
+
+    allowed, reason, resp = gate(sub_args)
+
+    if args.explain:
+        print(f"{DIM}[mcpf-gh] gate: {subcmd}{NC}", file=sys.stderr)
+        print(f"{DIM}[mcpf-gh] reason: {reason}{NC}", file=sys.stderr)
+        if resp:
+            for t in resp.get("triples", []):
+                print(f"{DIM}[mcpf-gh] triple: {t}{NC}", file=sys.stderr)
+
+    if not allowed and not args.allow_unsafe:
+        print(f"{RED}REJECTED{NC} by mcp-former: {reason}", file=sys.stderr)
+        if resp and resp.get("triples"):
+            for t in resp["triples"]:
+                if t.get("status") == "grounded":
+                    print(f"  {DIM}grounded:{NC} "
+                          f"{t['s']} {t['p']} {t['o']}  "
+                          f"({DIM}tier={t.get('tier','?')}){NC}",
+                          file=sys.stderr)
+        print(f"  {DIM}override with --allow-unsafe if you really mean it"
+              f"{NC}", file=sys.stderr)
+        return 2
+
+    if args.explain:
+        print(f"{GREEN}[mcpf-gh] PASS{NC} → executing gh "
+              f"{' '.join(rest)}", file=sys.stderr)
+    try:
+        return subprocess.call(["gh"] + rest)
+    except FileNotFoundError:
+        print(f"{RED}gh CLI not found on PATH.{NC}", file=sys.stderr)
+        return 127
+
+
+if __name__ == "__main__":
+    sys.exit(main())

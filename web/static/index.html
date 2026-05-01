@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mcp-former — Terraform for legacy software → AI agents</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="brand">
+      <div class="logo">▰▰</div>
+      <div>
+        <h1>mcp-former</h1>
+        <p class="tagline">Terraform for legacy software → AI agents.</p>
+      </div>
+    </div>
+    <div class="health" id="health">
+      <span class="dot" id="health-dot"></span>
+      <span id="health-text">checking…</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero">
+    <h2>Wrap any CLI behind a verification gate.</h2>
+    <p class="lede">
+      Pick a target tool, get a downloadable adapter that gates
+      destructive operations against a domain ontology. Every block is
+      explainable — traces back to a specific grounded fact with
+      provenance.
+    </p>
+  </section>
+
+  <section class="form-card">
+    <h3>1. Pick a target</h3>
+    <div class="presets" id="presets">
+      <!-- populated from /api/registry -->
+      <div class="preset-loading">loading registry…</div>
+    </div>
+
+    <h3>2. Options</h3>
+    <label class="opt">
+      <input type="checkbox" id="use-llm">
+      <span>Use LLM classification (needs <code>ANTHROPIC_API_KEY</code>
+      on server; falls back to keyword heuristic)</span>
+    </label>
+
+    <div class="actions">
+      <button id="run-btn" class="btn primary" disabled>
+        Introspect →
+      </button>
+      <span class="hint" id="hint">select a target above</span>
+    </div>
+  </section>
+
+  <section class="output-card hidden" id="output-card">
+    <div class="output-head">
+      <h3>Plan output</h3>
+      <span id="output-status" class="status running">running…</span>
+    </div>
+    <pre id="output"></pre>
+    <div class="output-actions hidden" id="output-actions">
+      <a id="download-link" class="btn primary" download>Download wrapper bundle</a>
+      <button class="btn ghost" id="rerun-btn">Run again</button>
+    </div>
+  </section>
+
+  <section class="info">
+    <h3>How it works</h3>
+    <pre class="diagram">
+LLM
+ │
+ ▼  (MCP tool call)
+mcpf-&lt;adapter&gt;             adapter scripts in bin/
+ │
+ ├─► build a CLAIM about the operation's safety
+ ├─► tardygrada daemon: cmd=run, claim=...
+ │      └─► VERIFIED  → unsafe, REJECT
+ │      └─► ontology_gap → safe, EXECUTE
+ ▼
+underlying software        (only if gate passes)
+    </pre>
+    <p class="footnote">
+      mcp-former is the introspection / wrapper layer.
+      <a href="https://github.com/fabio-rovai/tardygrada">tardygrada</a>
+      is the verification engine. Two-layer model — clean separation.
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <span>mcp-former v0.4 · private prototype</span>
+    <span class="sep">·</span>
+    <a href="https://github.com/fabio-rovai/mcp-former">repo</a>
+  </div>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

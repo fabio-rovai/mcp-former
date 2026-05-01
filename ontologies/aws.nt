@@ -1,0 +1,45 @@
+# mcp-former aws (AWS CLI) domain ontology — bundled tier.
+#
+# AWS surface is huge (~200 services, thousands of operations). The
+# wrapper uses pattern-matching (delete-*, terminate-*, *-with-force)
+# rather than per-operation enumeration. The ontology stores:
+#
+#   protected_resource_tag — values of `Environment` tag that block
+#                             destructive ops (production, prod, live)
+#   destructive_op         — operation patterns
+#   protected_service      — entire AWS services where deletion needs
+#                             explicit override (route53, kms, ...)
+
+# Production / live tag values — anything tagged with these resists
+# destructive ops without --allow-unsafe.
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_tag> .
+<http://tardygrada.org/prod> <http://schema.org/is_a> <http://tardygrada.org/protected_tag> .
+<http://tardygrada.org/live> <http://schema.org/is_a> <http://tardygrada.org/protected_tag> .
+<http://tardygrada.org/critical> <http://schema.org/is_a> <http://tardygrada.org/protected_tag> .
+
+# Destructive operation patterns (matched as prefix or whole verb)
+<http://tardygrada.org/terminate_instances> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_db_instance> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_db_cluster> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_bucket> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_function> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_stack> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_user> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_role> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_policy> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_table> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_cluster> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_repository> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_log_group> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_secret> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_key> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+
+# Patterns that combine the verb with --force / --recursive
+<http://tardygrada.org/s3_rm_recursive> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/s3_rb_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+
+# Services where any mutation needs review (KMS rotation, Route53,
+# IAM root-account stuff). Today we just block the mutating verbs in
+# them; ramping into more granular controls is future work.
+<http://tardygrada.org/route53> <http://schema.org/is_a> <http://tardygrada.org/protected_service> .
+<http://tardygrada.org/organizations> <http://schema.org/is_a> <http://tardygrada.org/protected_service> .

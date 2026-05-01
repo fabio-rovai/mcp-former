@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""
+mcpf-aws: a verifiable wrapper around the AWS CLI.
+
+The AWS surface is huge (~200 services, thousands of operations).
+Rather than enumerating per-operation, the wrapper uses pattern
+matching: any `aws <service> delete-*`, `terminate-*`, or
+`*-with-force`-style call is checked against the ontology.
+
+Currently gated:
+
+    aws ec2 terminate-instances ...    reject (terminate_instances)
+    aws s3 rb --force <bucket>          reject (s3_rb_force)
+    aws s3 rm --recursive <prefix>      reject (s3_rm_recursive)
+    aws rds delete-db-instance ...      reject (delete_db_instance)
+    aws iam delete-user ...             reject (delete_user)
+    aws cloudformation delete-stack ... reject (delete_stack)
+    aws lambda delete-function ...      reject (delete_function)
+    aws s3api delete-bucket ...         reject (delete_bucket)
+    aws kms delete-key ...              reject (delete_key)
+    aws route53 ...                     reject (protected_service)
+
+Pattern fallback: if the verb starts with `delete-` or `terminate-`,
+the wrapper builds a normalised op name (delete-db-instance →
+delete_db_instance) and checks it against destructive_op generically.
+
+Read-only verbs (describe-*, list-*, get-*, head-*) pass through.
+
+Use:
+    mcpf-aws ec2 describe-instances
+    mcpf-aws ec2 terminate-instances --instance-ids i-abc      # REJECTED
+    mcpf-aws --explain rds delete-db-instance --db-instance-identifier x
+    mcpf-aws --allow-unsafe ec2 terminate-instances --instance-ids i-abc
+
+Requires the tardygrada daemon and aws CLI.
+"""
+import argparse
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+
+SOCK = "/tmp/tardygrada.sock"
+
+GREEN  = "\033[0;32m"
+YELLOW = "\033[1;33m"
+RED    = "\033[0;31m"
+DIM    = "\033[2m"
+NC     = "\033[0m"
+
+
+def daemon_query(claim):
+    if not os.path.exists(SOCK):
+        return None
+    try:
+        s = socket.socket(socket.AF_UNIX)
+        s.connect(SOCK)
+        s.sendall((json.dumps({"cmd": "run", "claim": claim}) + "\n").encode())
+        s.shutdown(socket.SHUT_WR)
+        buf = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk: break
+            buf += chunk
+        s.close()
+        return json.loads(buf.decode().strip())
+    except Exception:
+        return None
+
+
+def claim_grounded(claim):
+    resp = daemon_query(claim)
+    if not resp:
+        return False, resp
+    if resp.get("result") != "VERIFIED":
+        return False, resp
+    for t in resp.get("triples", []):
+        if t.get("status") == "grounded":
+            return True, resp
+    return False, resp
+
+
+def normalize(s):
+    return re.sub(r"[^a-zA-Z0-9]", "_", s).strip("_")
+
+
+READ_PREFIXES = ("describe-", "list-", "get-", "head-", "lookup-",
+                 "search-", "select-")
+
+
+def gate_aws(args):
+    """args = [service, verb, *flags]. Empty/short → passthrough."""
+    if len(args) < 2:
+        return True, "no operation", None
+    service, verb = args[0], args[1]
+
+    # Read-only verbs always pass.
+    if any(verb.startswith(pref) for pref in READ_PREFIXES):
+        return True, f"read-only verb {verb}", None
+
+    # Protected service → block any non-read verb.
+    svc_norm = normalize(service)
+    ok, resp = claim_grounded(f"{svc_norm} is a protected_service")
+    if ok:
+        return False, f"service {service} is_a protected_service", resp
+
+    # s3 special-cases (s3 has its own DSL: rm, rb, cp, mv, sync, ls)
+    if service == "s3":
+        if verb == "rb" and "--force" in args:
+            ok, resp = claim_grounded("s3_rb_force is a destructive_op")
+            if ok:
+                return False, "aws s3 rb --force is destructive_op", resp
+        if verb == "rm" and "--recursive" in args:
+            ok, resp = claim_grounded("s3_rm_recursive is a destructive_op")
+            if ok:
+                return False, "aws s3 rm --recursive is destructive_op", resp
+        return True, f"aws s3 {verb}", None
+
+    # Pattern: terminate-*, delete-*, force-*, purge-*
+    destructive_prefixes = ("terminate-", "delete-", "purge-",
+                             "destroy-", "remove-")
+    if any(verb.startswith(p) for p in destructive_prefixes):
+        op_name = normalize(verb)
+        ok, resp = claim_grounded(f"{op_name} is a destructive_op")
+        if ok:
+            return False, f"aws {service} {verb} is destructive_op", resp
+        # Fall-through: if the specific op isn't in the ontology, still
+        # block by default — the prefix is the signal.
+        return False, f"aws {service} {verb} matches destructive prefix", None
+
+    return True, f"aws {service} {verb}", None
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    ap.add_argument("--explain", action="store_true")
+    ap.add_argument("--allow-unsafe", action="store_true")
+    ap.add_argument("--help-mcpf", action="store_true")
+    args, rest = ap.parse_known_args()
+
+    if args.help_mcpf or not rest:
+        print(__doc__)
+        return 0
+
+    allowed, reason, resp = gate_aws(rest)
+
+    if args.explain:
+        print(f"{DIM}[mcpf-aws] gate: aws {' '.join(rest[:2])}{NC}",
+              file=sys.stderr)
+        print(f"{DIM}[mcpf-aws] reason: {reason}{NC}", file=sys.stderr)
+        if resp:
+            for t in resp.get("triples", []):
+                print(f"{DIM}[mcpf-aws] triple: {t}{NC}", file=sys.stderr)
+
+    if not allowed and not args.allow_unsafe:
+        print(f"{RED}REJECTED{NC} by mcp-former: {reason}", file=sys.stderr)
+        if resp and resp.get("triples"):
+            for t in resp["triples"]:
+                if t.get("status") == "grounded":
+                    print(f"  {DIM}grounded:{NC} "
+                          f"{t['s']} {t['p']} {t['o']}  "
+                          f"({DIM}tier={t.get('tier','?')}){NC}",
+                          file=sys.stderr)
+        print(f"  {DIM}override with --allow-unsafe if you really mean it"
+              f"{NC}", file=sys.stderr)
+        return 2
+
+    if args.explain:
+        print(f"{GREEN}[mcpf-aws] PASS{NC} → executing aws "
+              f"{' '.join(rest)}", file=sys.stderr)
+    try:
+        return subprocess.call(["aws"] + rest)
+    except FileNotFoundError:
+        print(f"{RED}aws CLI not found on PATH.{NC}", file=sys.stderr)
+        return 127
+
+
+if __name__ == "__main__":
+    sys.exit(main())

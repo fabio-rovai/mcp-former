@@ -50,6 +50,15 @@ def main():
     if sub == "kubectl":
         target = os.path.join(BIN, "mcpf-kubectl")
         os.execv(target, [target] + rest)
+    if sub == "gh":
+        target = os.path.join(BIN, "mcpf-gh")
+        os.execv(target, [target] + rest)
+    if sub == "aws":
+        target = os.path.join(BIN, "mcpf-aws")
+        os.execv(target, [target] + rest)
+    if sub == "psql":
+        target = os.path.join(BIN, "mcpf-psql")
+        os.execv(target, [target] + rest)
 
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     print("run 'mcpf --help' for usage", file=sys.stderr)

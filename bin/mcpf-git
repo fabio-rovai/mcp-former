@@ -187,7 +187,11 @@ def main():
         if args.explain:
             print(f"{DIM}[mcpf-git] {subcmd} is read-only or "
                   f"un-gated; passing through{NC}", file=sys.stderr)
-        return subprocess.call(["git"] + rest)
+        try:
+            return subprocess.call(["git"] + rest)
+        except FileNotFoundError:
+            print(f"{RED}git not found on PATH.{NC}", file=sys.stderr)
+            return 127
 
     allowed, reason, resp = gate(sub_args)
 
@@ -214,7 +218,11 @@ def main():
     if args.explain:
         print(f"{GREEN}[mcpf-git] PASS{NC} → executing git "
               f"{' '.join(rest)}", file=sys.stderr)
-    return subprocess.call(["git"] + rest)
+    try:
+        return subprocess.call(["git"] + rest)
+    except FileNotFoundError:
+        print(f"{RED}git not found on PATH.{NC}", file=sys.stderr)
+        return 127
 
 
 if __name__ == "__main__":
