@@ -1,13 +1,12 @@
 // mcp-former — single-page client.
-// Loads the registry, lets the user pick a target, streams `mcpf plan`
-// output via SSE, exposes a download button when the run completes.
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 let selectedTarget = null;
+let lastDownloadable = null;   // {endpoint, filename}
 
-// --- ANSI → HTML (only the escape codes mcpf-plan uses) -----------------
+// --- ANSI → HTML ----------------------------------------------------
 
 const ANSI_MAP = {
   "0;32": "ansi-green",
@@ -18,8 +17,6 @@ const ANSI_MAP = {
 };
 
 function ansiToHtml(text) {
-  // Replace ESC[<code>m...ESC[0m with span. Naive but works for the
-  // narrow set mcpf-plan emits.
   let out = "";
   let i = 0;
   let openClass = null;
@@ -42,7 +39,6 @@ function ansiToHtml(text) {
       }
       i = end + 1;
     } else {
-      // basic HTML escape
       const c = text[i];
       out += (c === "<") ? "&lt;" :
              (c === ">") ? "&gt;" :
@@ -54,7 +50,18 @@ function ansiToHtml(text) {
   return out;
 }
 
-// --- registry + presets ------------------------------------------------
+// --- tabs ---------------------------------------------------------------
+
+$$(".tab").forEach((t) => {
+  t.addEventListener("click", () => {
+    $$(".tab").forEach((x) => x.classList.toggle(
+      "active", x.dataset.tab === t.dataset.tab));
+    $$(".tab-panel").forEach((p) => p.classList.toggle(
+      "hidden", p.id !== `tab-${t.dataset.tab}`));
+  });
+});
+
+// --- registry + presets ---------------------------------------------
 
 async function loadRegistry() {
   const r = await fetch("/api/registry");
@@ -84,43 +91,55 @@ function selectTarget(target) {
   $$(".preset").forEach((el) => {
     el.classList.toggle("selected", el.dataset.target === target);
   });
-  $("#run-btn").disabled = false;
-  $("#hint").textContent = `${target} selected — ready to introspect`;
+  $("#plan-btn").disabled = false;
+  $("#wrap-btn").disabled = false;
+  $("#hint-builtin").textContent =
+    `${target} selected — Plan shows the diff; Wrap builds the bundle.`;
 }
 
-// --- introspect run ----------------------------------------------------
+// --- shared output handling ----------------------------------------
 
-async function runIntrospect() {
-  if (!selectedTarget) return;
-  const useLLM = $("#use-llm").checked;
-  $("#run-btn").disabled = true;
-  $("#hint").textContent = "running…";
+function showOutput(headerText) {
   $("#output-card").classList.remove("hidden");
   $("#output-actions").classList.add("hidden");
   $("#output").innerHTML = "";
   $("#output-status").textContent = "running…";
   $("#output-status").className = "status running";
+  lastDownloadable = null;
+}
 
-  // POST → SSE.
-  // fetch + manual reader so we can parse SSE frames ourselves
-  const resp = await fetch("/api/introspect", {
+function appendLine(html) {
+  const out = $("#output");
+  out.innerHTML += html + "\n";
+  out.scrollTop = out.scrollHeight;
+}
+
+function setDoneStatus(ok) {
+  $("#output-status").textContent = ok ? "done" : "error";
+  $("#output-status").className = "status " + (ok ? "done" : "error");
+}
+
+function attachDownload(href, filename) {
+  const link = $("#download-link");
+  link.href = href;
+  link.setAttribute("download", filename || "");
+  $("#output-actions").classList.remove("hidden");
+}
+
+async function streamSSE(endpoint, body, frameHandlers) {
+  const resp = await fetch(endpoint, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({target: selectedTarget, use_llm: useLLM}),
+    body: JSON.stringify(body),
   });
-
   if (!resp.ok) {
     appendLine(`<span class="ansi-red">request failed: ${resp.status}</span>`);
-    $("#output-status").textContent = "error";
-    $("#output-status").className = "status error";
-    $("#run-btn").disabled = false;
+    setDoneStatus(false);
     return;
   }
-
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-
   while (true) {
     const {done, value} = await reader.read();
     if (done) break;
@@ -129,15 +148,12 @@ async function runIntrospect() {
     while ((idx = buf.indexOf("\n\n")) >= 0) {
       const frame = buf.slice(0, idx);
       buf = buf.slice(idx + 2);
-      handleFrame(frame);
+      handleFrame(frame, frameHandlers);
     }
   }
-
-  $("#run-btn").disabled = false;
 }
 
-function handleFrame(frame) {
-  // SSE frame: "event: NAME\ndata: PAYLOAD"
+function handleFrame(frame, handlers) {
   const lines = frame.split("\n");
   let event = "message";
   let data = "";
@@ -147,35 +163,106 @@ function handleFrame(frame) {
   }
   let payload;
   try { payload = JSON.parse(data); } catch { payload = data; }
+  const fn = handlers[event];
+  if (fn) fn(payload);
+  else if (event === "log") appendLine(ansiToHtml(payload.line));
+}
 
-  if (event === "start") {
-    appendLine(`<span class="ansi-dim">$ ${payload.cmd}</span>`);
-  } else if (event === "log") {
-    appendLine(ansiToHtml(payload.line));
-  } else if (event === "done") {
-    const ok = payload.exit_code === 0;
-    $("#output-status").textContent = ok ? "done" : "error";
-    $("#output-status").className = "status " + (ok ? "done" : "error");
-    if (ok) {
-      const link = $("#download-link");
-      link.href = `/api/download/${payload.target}`;
-      $("#output-actions").classList.remove("hidden");
-    }
-    $("#hint").textContent = `${payload.target} — ${ok ? "done" : "failed"}`;
-  } else if (event === "error") {
-    appendLine(`<span class="ansi-red">${payload.message || data}</span>`);
-    $("#output-status").textContent = "error";
-    $("#output-status").className = "status error";
+const baseHandlers = {
+  start: (p) => appendLine(`<span class="ansi-dim">$ ${p.cmd}</span>`),
+  log:   (p) => appendLine(ansiToHtml(p.line)),
+  error: (p) => {
+    appendLine(`<span class="ansi-red">${p.message || ""}</span>`);
+    setDoneStatus(false);
+  },
+};
+
+// --- 1. Plan flow (introspect for diff vs ontology) ----------------
+
+async function runPlan() {
+  if (!selectedTarget) return;
+  const useLLM = $("#use-llm").checked;
+  $("#plan-btn").disabled = true;
+  $("#wrap-btn").disabled = true;
+  showOutput();
+  await streamSSE("/api/introspect",
+    {target: selectedTarget, use_llm: useLLM},
+    {
+      ...baseHandlers,
+      done: (p) => {
+        const ok = p.exit_code === 0;
+        setDoneStatus(ok);
+        if (ok) {
+          attachDownload(`/api/download/${p.target}`,
+                          `mcp-former-${p.target}.zip`);
+        }
+        $("#hint-builtin").textContent = `${p.target} — ${ok ? "done" : "failed"}`;
+        $("#plan-btn").disabled = false;
+        $("#wrap-btn").disabled = false;
+      },
+    });
+}
+
+// --- 2. Wrap flow (full MCP bundle: adapter + ontology + server + skill) ---
+
+async function runWrap(target) {
+  $("#plan-btn").disabled = true;
+  $("#wrap-btn").disabled = true;
+  showOutput();
+  await streamSSE("/api/wrap", {target},
+    {
+      ...baseHandlers,
+      bundle_ready: (p) => {
+        attachDownload(`/api/download-bundle/${p.token}`, p.filename);
+        appendLine(
+          `<span class="ansi-green">bundle ready — ` +
+          `${p.filename}</span>`);
+      },
+      done: (p) => {
+        const ok = p.exit_code === 0;
+        setDoneStatus(ok);
+        $("#plan-btn").disabled = false;
+        $("#wrap-btn").disabled = false;
+      },
+    });
+}
+
+// --- 3. URL flow (paste github URL → wrap) ------------------------
+
+async function runWrapURL() {
+  const url = $("#github-url").value.trim();
+  if (!url) {
+    $("#hint-url").textContent = "paste a GitHub URL first";
+    return;
   }
+  if (!/^https?:\/\/github\.com\//.test(url)) {
+    $("#hint-url").textContent = "must be a github.com URL";
+    return;
+  }
+  $("#wrap-url-btn").disabled = true;
+  $("#hint-url").textContent = "cloning + introspecting…";
+  showOutput();
+  await streamSSE("/api/wrap", {target: url},
+    {
+      ...baseHandlers,
+      bundle_ready: (p) => {
+        attachDownload(`/api/download-bundle/${p.token}`, p.filename);
+        appendLine(
+          `<span class="ansi-green">bundle ready — ` +
+          `${p.filename}</span>`);
+      },
+      done: (p) => {
+        const ok = p.exit_code === 0;
+        setDoneStatus(ok);
+        $("#wrap-url-btn").disabled = false;
+        $("#hint-url").textContent =
+          ok ? "edit the stub ontology to add real protections"
+             : "failed — see output above";
+      },
+    });
 }
 
-function appendLine(html) {
-  const out = $("#output");
-  out.innerHTML += html + "\n";
-  out.scrollTop = out.scrollHeight;
-}
-
-// --- health --------------------------------------------------------------
+// --- health --------------------------------------------------------
 
 async function checkHealth() {
   try {
@@ -195,10 +282,17 @@ async function checkHealth() {
   }
 }
 
-// --- bind --------------------------------------------------------------
+// --- bind ----------------------------------------------------------
 
-$("#run-btn").addEventListener("click", runIntrospect);
-$("#rerun-btn").addEventListener("click", runIntrospect);
+$("#plan-btn").addEventListener("click", runPlan);
+$("#wrap-btn").addEventListener("click", () => runWrap(selectedTarget));
+$("#wrap-url-btn").addEventListener("click", runWrapURL);
+$("#rerun-btn").addEventListener("click", () => {
+  // Re-run whichever tab is active
+  const activeTab = $(".tab.active").dataset.tab;
+  if (activeTab === "builtin") runWrap(selectedTarget);
+  else runWrapURL();
+});
 
 loadRegistry();
 checkHealth();

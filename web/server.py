@@ -27,6 +27,7 @@ import asyncio
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import zipfile
@@ -177,6 +178,68 @@ async def introspect(req: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache",
                  "X-Accel-Buffering": "no"})
+
+
+async def stream_wrap(target_or_url: str):
+    """Run `mcpf wrap <target>` as a subprocess in a temp dir, stream
+    progress, then end with a 'bundle_ready' event carrying a path the
+    caller can hit /api/download-bundle/<id> on."""
+    import tempfile
+    work = tempfile.mkdtemp(prefix="mcpf-wrap-")
+    out_dir = os.path.join(work, "bundle")
+    wrap_bin = BIN / "mcpf-wrap"
+    if not wrap_bin.exists():
+        yield sse("error", {"message": f"adapter binary missing: {wrap_bin}"})
+        return
+    cmd = [str(wrap_bin), target_or_url, "--out", out_dir, "--zip"]
+    yield sse("start", {"target": target_or_url, "cmd": " ".join(cmd)})
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT)
+    while True:
+        line = await proc.stdout.readline()
+        if not line:
+            break
+        yield sse("log", {"line": line.decode("utf-8", "replace").rstrip()})
+    rc = await proc.wait()
+    if rc == 0:
+        # Path is out_dir.zip per mcpf-wrap convention
+        zip_path = out_dir + ".zip"
+        if os.path.exists(zip_path):
+            # Stash the path under a short token so the client can download
+            token = os.path.basename(work)
+            BUNDLE_CACHE[token] = zip_path
+            yield sse("bundle_ready",
+                      {"token": token,
+                       "filename": f"mcp-former-{re.sub(r'[^A-Za-z0-9]+', '-', target_or_url)}.zip"})
+    yield sse("done", {"target": target_or_url, "exit_code": rc})
+
+
+# In-memory cache: token → bundle zip path. Lives for the process
+# lifetime; bundles in /tmp get garbage-collected by the OS.
+BUNDLE_CACHE = {}
+
+
+@app.post("/api/wrap")
+async def wrap_target(req: Request):
+    body = await req.json()
+    target = body.get("target", "").strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="missing target")
+    return StreamingResponse(
+        stream_wrap(target),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache",
+                 "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/download-bundle/{token}")
+async def download_bundle(token: str):
+    path = BUNDLE_CACHE.get(token)
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="bundle expired or missing")
+    return FileResponse(path, media_type="application/zip",
+                         filename=os.path.basename(path))
 
 
 @app.get("/api/download/{target}")

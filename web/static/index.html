@@ -37,24 +37,56 @@
   </section>
 
   <section class="form-card">
-    <h3>1. Pick a target</h3>
-    <div class="presets" id="presets">
-      <!-- populated from /api/registry -->
-      <div class="preset-loading">loading registry…</div>
+    <div class="tabs">
+      <button class="tab active" data-tab="builtin">Built-in target</button>
+      <button class="tab" data-tab="url">GitHub URL</button>
     </div>
 
-    <h3>2. Options</h3>
-    <label class="opt">
-      <input type="checkbox" id="use-llm">
-      <span>Use LLM classification (needs <code>ANTHROPIC_API_KEY</code>
-      on server; falls back to keyword heuristic)</span>
-    </label>
+    <div class="tab-panel" id="tab-builtin">
+      <h3>1. Pick a target</h3>
+      <div class="presets" id="presets">
+        <div class="preset-loading">loading registry…</div>
+      </div>
 
-    <div class="actions">
-      <button id="run-btn" class="btn primary" disabled>
-        Introspect →
-      </button>
-      <span class="hint" id="hint">select a target above</span>
+      <h3>2. Options</h3>
+      <label class="opt">
+        <input type="checkbox" id="use-llm">
+        <span>Use LLM classification (needs <code>ANTHROPIC_API_KEY</code>
+        on server; falls back to keyword heuristic)</span>
+      </label>
+
+      <div class="actions">
+        <button id="plan-btn" class="btn primary" disabled>
+          Plan diff →
+        </button>
+        <button id="wrap-btn" class="btn ghost" disabled>
+          Wrap as MCP bundle →
+        </button>
+        <span class="hint" id="hint-builtin">select a target above</span>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" id="tab-url">
+      <h3>1. Paste a GitHub URL</h3>
+      <p class="lede" style="font-size: 14px; margin-top: 0;">
+        Best-effort introspection: clones the repo, detects the binary
+        (Cargo.toml, package.json, pyproject.toml, go.mod, ...), runs
+        <code>--help</code> if available, and emits a stub bundle you
+        can tighten by editing.
+      </p>
+      <input type="text" id="github-url" class="text-input"
+        placeholder="https://github.com/owner/repo"
+        spellcheck="false"
+        autocapitalize="off">
+
+      <div class="actions">
+        <button id="wrap-url-btn" class="btn primary">
+          Generate MCP bundle →
+        </button>
+        <span class="hint" id="hint-url">
+          stub generation only; refine the ontology before production
+        </span>
+      </div>
     </div>
   </section>
 
@@ -65,7 +97,7 @@
     </div>
     <pre id="output"></pre>
     <div class="output-actions hidden" id="output-actions">
-      <a id="download-link" class="btn primary" download>Download wrapper bundle</a>
+      <a id="download-link" class="btn primary" download>Download bundle (zip)</a>
       <button class="btn ghost" id="rerun-btn">Run again</button>
     </div>
   </section>

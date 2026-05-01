@@ -1,0 +1,78 @@
+---
+name: {{TOOL_NAME}}-mcpf
+description: Drive {{TOOL_NAME}} safely. Use when the user asks to run {{TOOL_NAME}} commands. Destructive operations are gated against an ontology — they will be rejected unless explicitly overridden.
+---
+
+# {{TOOL_NAME}} via mcp-former
+
+You have access to **{{TOOL_NAME}}** through a verification gate. The
+gate ensures destructive operations are caught before execution.
+
+## When to use
+
+- Any task that involves running `{{TOOL_NAME}}` commands
+- Especially destructive operations (delete, force, drop, terminate)
+
+## How it works
+
+Each call goes through this flow:
+
+1. You call `{{TOOL_NAME}}_run` with the args you'd pass to {{TOOL_NAME}}
+2. The verification gate decomposes the operation into a claim and
+   grounds it against the ontology in `ontologies/{{TOOL_NAME}}.nt`
+3. If the operation would touch a protected resource or is a
+   destructive op, the call is **rejected** with a clear reason and
+   the grounded fact that triggered the rejection
+4. Otherwise the underlying {{TOOL_NAME}} command runs and you get
+   stdout/stderr/exit_code back
+
+## Tools
+
+### `{{TOOL_NAME}}_run`
+
+Execute a {{TOOL_NAME}} command. Pass args as a list:
+
+```
+args: ["status", "-s"]                    # safe, runs through
+args: ["branch", "-D", "main"]             # rejected (protected)
+args: ["push", "--force", "origin", "main"] # rejected (destructive)
+```
+
+Set `allow_unsafe: true` to bypass the gate. **Only do this when the
+user has explicitly confirmed the operation is intended.** The
+rejection message will name the specific protected fact; relay that
+to the user before overriding.
+
+### `{{TOOL_NAME}}_describe_gate`
+
+Preview the gate's decision without running anything. Useful when you
+want to explain to the user why an operation will/won't be allowed
+before they confirm.
+
+## What gets gated
+
+The full list lives in `ontologies/{{TOOL_NAME}}.nt`. Common
+patterns:
+
+{{GATED_OPERATIONS}}
+
+## What does NOT get gated
+
+- Read-only commands (status, log, list, describe, get, ...) pass
+  through without verification — calling them does not consume the
+  verification budget.
+- Anything not matching a known destructive pattern. The gate is a
+  safety net, not a complete authorisation system.
+
+## Override etiquette
+
+When the gate rejects:
+
+1. **Read the rejection.** It names the specific fact (e.g. "main
+   is_a protected_branch (tier=bundled)").
+2. **Explain to the user.** "I tried to delete branch main, but
+   mcp-former blocked it because main is in the protected_branch
+   list."
+3. **Ask for confirmation** before retrying with `allow_unsafe: true`.
+4. Don't override silently. The whole point of the gate is that
+   destructive ops require an explicit human-in-the-loop check.

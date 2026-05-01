@@ -6,6 +6,9 @@ Subcommands:
     plan TARGET          introspect target software, emit a Terraform-
                           style plan against ontologies/TARGET.nt
     apply TARGET         run plan and write the result to disk
+    wrap TARGET|URL      generate a self-contained bundle (adapter +
+                          ontology + MCP server + skill) for a known
+                          target or a GitHub repo URL
     git GIT-ARGS         drive git through the verification gate
     kubectl K8S-ARGS     drive kubectl through the verification gate
 
@@ -58,6 +61,9 @@ def main():
         os.execv(target, [target] + rest)
     if sub == "psql":
         target = os.path.join(BIN, "mcpf-psql")
+        os.execv(target, [target] + rest)
+    if sub == "wrap":
+        target = os.path.join(BIN, "mcpf-wrap")
         os.execv(target, [target] + rest)
 
     print(f"unknown subcommand: {sub}", file=sys.stderr)
