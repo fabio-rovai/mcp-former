@@ -48,15 +48,20 @@ Use:
     mcpf plan git --target /path/to/git.nt
 """
 import argparse
+import hashlib
 import json
 import os
 import re
 import socket
 import subprocess
 import sys
+import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TARDY_SOCK = "/tmp/tardygrada.sock"
+CACHE_DIR = os.path.join(ROOT, ".mcpf-cache")
+LLM_MODEL = "claude-haiku-4-5-20251001"
+LLM_BATCH = 20
 
 GREEN  = "\033[0;32m"
 YELLOW = "\033[1;33m"
@@ -159,6 +164,143 @@ def classify(name, desc, explain=False):
     if explain:
         return cls, why
     return cls, None
+
+
+# ----------------------------------------------------------------------
+# LLM-assisted classification (Anthropic API).
+# Batched (LLM_BATCH at a time), cached on disk so re-runs are cheap.
+# Falls back to heuristic per-row on parse error or API failure.
+# ----------------------------------------------------------------------
+
+LLM_SYSTEM = (
+    "You classify CLI subcommands by destructiveness for safety gating. "
+    "Categories:\n"
+    "  read_only  : only reads state (status, log, list, show, diff)\n"
+    "  mutating   : changes state but is recoverable in normal use "
+    "(commit, add, fetch, push without --force)\n"
+    "  destructive: irrecoverably destroys data — delete, --force, "
+    "--hard, rewrites history, removes refs, expires reflog\n"
+    "Be conservative: when a subcommand has BOTH a destructive mode and "
+    "a safe mode (e.g. branch, tag, push), classify by its DEFAULT "
+    "behaviour, not its destructive mode. If the default is "
+    "list/create/move-tip, it is mutating, not destructive. The wrapper "
+    "handles flag-level granularity separately.\n"
+    "Output ONLY a JSON array, no prose. Each element: "
+    "{\"name\": str, \"class\": str, \"why\": str}."
+)
+
+
+def cache_key(target, name, desc):
+    h = hashlib.sha256(f"{target}|{name}|{desc}".encode()).hexdigest()[:16]
+    return os.path.join(CACHE_DIR, f"{target}-{h}.json")
+
+
+def cache_get(target, name, desc):
+    p = cache_key(target, name, desc)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def cache_put(target, name, desc, record):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    p = cache_key(target, name, desc)
+    try:
+        with open(p, "w") as f:
+            json.dump(record, f)
+    except Exception:
+        pass
+
+
+def llm_call(prompt):
+    """Single Anthropic API call. Returns the model's text or raises."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    body = json.dumps({
+        "model": LLM_MODEL,
+        "max_tokens": 4096,
+        "system": LLM_SYSTEM,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=body,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        })
+    with urllib.request.urlopen(req, timeout=60) as r:
+        resp = json.loads(r.read().decode())
+    return resp["content"][0]["text"]
+
+
+def classify_batch_llm(target, batch):
+    """batch = [(name, desc), ...]; returns dict name → (cls, why)."""
+    rows = "\n".join(f"{i+1}. {n}: {d}" for i, (n, d) in enumerate(batch))
+    prompt = (
+        f"Target tool: {target}\n\n"
+        f"Classify each subcommand below.\n\n"
+        f"{rows}\n\n"
+        f"Return only the JSON array."
+    )
+    text = llm_call(prompt)
+    # Strip markdown fences if the model added any
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(),
+                  flags=re.MULTILINE)
+    try:
+        arr = json.loads(text)
+    except json.JSONDecodeError:
+        # Try to find the JSON array inside a possibly chatty response
+        m = re.search(r"\[\s*{.*}\s*\]", text, re.DOTALL)
+        if not m:
+            raise RuntimeError(f"LLM returned non-JSON: {text[:200]}")
+        arr = json.loads(m.group(0))
+    out = {}
+    for row in arr:
+        cls = row.get("class", "mutating")
+        if cls not in ("read_only", "mutating", "destructive"):
+            cls = "mutating"
+        out[row.get("name", "")] = (cls, row.get("why", ""))
+    return out
+
+
+def classify_all_llm(target, cmds):
+    """Classify all (name, desc) pairs with cache + batching.
+    Falls back to heuristic on per-row API failure."""
+    results = {}
+    todo = []
+    for name, desc in cmds:
+        cached = cache_get(target, name, desc)
+        if cached:
+            results[name] = (cached["class"], cached.get("why", ""))
+        else:
+            todo.append((name, desc))
+
+    for i in range(0, len(todo), LLM_BATCH):
+        batch = todo[i:i + LLM_BATCH]
+        try:
+            batch_results = classify_batch_llm(target, batch)
+        except Exception as e:
+            print(f"  {YELLOW}llm batch failed: {e}; falling back to "
+                  f"heuristic{NC}", file=sys.stderr)
+            batch_results = {}
+        for name, desc in batch:
+            if name in batch_results:
+                cls, why = batch_results[name]
+                results[name] = (cls, why)
+                cache_put(target, name, desc,
+                          {"class": cls, "why": why,
+                           "source": "llm", "model": LLM_MODEL})
+            else:
+                cls, _ = classify(name, desc, explain=False)
+                results[name] = (cls, "heuristic fallback")
+    return results
 
 
 # ----------------------------------------------------------------------
@@ -269,10 +411,34 @@ def main():
         help="print classifier reasoning per subcommand")
     ap.add_argument("--target", dest="ontology_path", default=None,
         help="output ontology path (default ontologies/<target>.nt)")
+    ap.add_argument("--llm", action="store_true",
+        help="use Anthropic API for classification (needs "
+             "ANTHROPIC_API_KEY); cached in .mcpf-cache/")
+    ap.add_argument("--no-cache", action="store_true",
+        help="ignore cached LLM classifications, force fresh calls")
     args = ap.parse_args()
+
+    if args.no_cache:
+        # Wipe the cache directory contents (don't remove the dir itself)
+        if os.path.isdir(CACHE_DIR):
+            for f in os.listdir(CACHE_DIR):
+                if f.startswith(f"{args.target}-") and f.endswith(".json"):
+                    try:
+                        os.remove(os.path.join(CACHE_DIR, f))
+                    except Exception:
+                        pass
 
     out_path = (args.ontology_path or
         os.path.join(ROOT, "ontologies", f"{args.target}.nt"))
+
+    use_llm = args.llm
+    if use_llm and not os.environ.get("ANTHROPIC_API_KEY"):
+        print(f"{YELLOW}--llm given but ANTHROPIC_API_KEY not set; "
+              f"falling back to heuristic{NC}")
+        use_llm = False
+    mode = (f"{CYAN}LLM ({LLM_MODEL}){NC}" if use_llm
+            else f"{DIM}heuristic (keyword){NC}")
+    print(f"{DIM}classifier:{NC} {mode}")
 
     print(f"{DIM}[1/4] discovering surface area{NC} ", end="", flush=True)
     cmds = DISCOVERERS[args.target]()
@@ -281,10 +447,18 @@ def main():
     print(f"{DIM}[2/4] classifying{NC} ", end="", flush=True)
     classified = []
     counts = {"read_only": 0, "mutating": 0, "destructive": 0}
-    for name, desc in cmds:
-        cls, why = classify(name, desc, explain=args.explain)
-        classified.append((name, cls, desc, why))
-        counts[cls] += 1
+    if use_llm:
+        llm_results = classify_all_llm(args.target, cmds)
+        for name, desc in cmds:
+            cls, why = llm_results.get(name,
+                classify(name, desc, explain=False))
+            classified.append((name, cls, desc, [why] if why else None))
+            counts[cls] += 1
+    else:
+        for name, desc in cmds:
+            cls, why = classify(name, desc, explain=args.explain)
+            classified.append((name, cls, desc, why))
+            counts[cls] += 1
     print(f"{DIM}............... {NC}"
           f"{counts['read_only']} read-only / "
           f"{counts['mutating']} mutating / "
