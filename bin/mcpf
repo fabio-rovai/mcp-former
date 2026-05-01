@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""
+mcpf — top-level CLI for mcp-former.
+
+Subcommands:
+    plan <target>        introspect target software, emit a Terraform-
+                          style plan against ontologies/<target>.nt
+    apply <target>       run plan and write the result to disk
+    git <git-args>       drive git through the verification gate
+
+Examples:
+    mcpf plan git
+    mcpf plan git --apply --reload-daemon
+    mcpf plan git --explain
+    mcpf git status
+    mcpf git --explain branch -D main
+
+This is a thin dispatcher; each subcommand is implemented as its own
+mcpf-<sub> script in bin/. Keeps each tool single-purpose and testable
+in isolation.
+"""
+import os
+import sys
+
+BIN = os.path.dirname(os.path.abspath(__file__))
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+
+    sub = sys.argv[1]
+    rest = sys.argv[2:]
+
+    if sub == "plan":
+        target = os.path.join(BIN, "mcpf-plan")
+        os.execv(target, [target] + rest)
+    if sub == "apply":
+        # apply == plan --apply
+        target = os.path.join(BIN, "mcpf-plan")
+        os.execv(target, [target] + rest + ["--apply"])
+    if sub == "git":
+        target = os.path.join(BIN, "mcpf-git")
+        os.execv(target, [target] + rest)
+
+    print(f"unknown subcommand: {sub}", file=sys.stderr)
+    print("run 'mcpf --help' for usage", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

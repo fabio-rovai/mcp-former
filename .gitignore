@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+venv/
+*.egg-info/
+
+# Local working state
+ontologies/*.local.nt
+.mcpf-cache/
