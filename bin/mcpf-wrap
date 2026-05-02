@@ -773,6 +773,39 @@ def render_surface(surface, max_per_framework=80):
 # Mode 1: known-target bundle
 # ----------------------------------------------------------------------
 
+def _example_args(ontology_path, binary):
+    """Pick 2 destructive ops from the ontology and render them as
+    realistic args-list examples for the skill. Tool-specific so the
+    LLM sees `["apps", "destroy", "myapp"]`, not `["branch", "-D",
+    "main"]` for flyctl."""
+    line_re = re.compile(
+        r'^<[^>]*org/(?P<s>[^>]+)>\s+<[^>]*org/is_a>\s+'
+        r'<[^>]*org/destructive_op>\s*\.\s*$')
+    candidates = []
+    if not Path(ontology_path).exists():
+        return ""
+    with open(ontology_path) as f:
+        for line in f:
+            m = line_re.match(line.strip())
+            if m:
+                candidates.append(m.group("s"))
+            if len(candidates) >= 4:
+                break
+    if not candidates:
+        return ""
+    # Render as `args: [...]` lines. Ops named `<binary>_<verb>` →
+    # ["verb", ...]. Ops named `<noun>_<verb>` → ["noun", "verb", ...].
+    out_lines = []
+    for op in candidates[:2]:
+        op_clean = op.replace(f"{binary}_", "", 1) if op.startswith(
+            f"{binary}_") else op
+        parts = op_clean.split("_")
+        arg_str = ", ".join(f'"{p}"' for p in parts) + ', "<target>"'
+        out_lines.append(
+            f'args: [{arg_str}]   # rejected ({op})')
+    return "\n".join(out_lines)
+
+
 def gated_operations_summary(ontology_path):
     """Read the .nt file and produce a short bulleted list of
     destructive_op / protected_* facts for the skill template."""
@@ -1193,13 +1226,16 @@ def build_repo_bundle(url, out_dir, llm_backend="auto"):
         target=target, binary=binary))
     os.chmod(stub_adapter, 0o755)
 
-    # Render server + skill from templates with the discovered binary
+    # Render server + skill from templates with the discovered binary.
+    # The GATED_OPERATIONS placeholder is filled with a real bullet
+    # list extracted from the freshly written ontology, so the skill
+    # tells the LLM exactly what's gated for this tool — not generic
+    # git-flavoured examples.
     mapping = {
         "TOOL_NAME": target,
         "BINARY": binary,
-        "GATED_OPERATIONS": ("(stub ontology — edit "
-                              f"`ontologies/{target}.nt` to add real "
-                              "protection rules)"),
+        "GATED_OPERATIONS": gated_operations_summary(onto_path),
+        "EXAMPLE_DESTRUCTIVE_ARGS": _example_args(onto_path, binary),
     }
     (out / "mcp_server.py").write_text(
         render(TEMPLATES / "mcp_server.py.tmpl", mapping))
@@ -1277,14 +1313,15 @@ AUDIT.md                   conformance report
 3. **Wire the MCP server into your LLM client**:
 
    Add to `~/.claude/mcp.json` (Claude Code) or your client's
-   equivalent:
+   equivalent. Replace `<bundle-path>` with the full path to this
+   bundle directory (run `pwd` from inside it to get it):
 
    ```json
    {{
      "mcpServers": {{
        "{target}-mcpf": {{
          "command": "python3",
-         "args": ["{Path.cwd() / 'mcp_server.py'}"]
+         "args": ["<bundle-path>/mcp_server.py"]
        }}
      }}
    }}

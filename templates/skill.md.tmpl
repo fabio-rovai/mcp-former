@@ -33,15 +33,14 @@ Each call goes through this flow:
 Execute a {{TOOL_NAME}} command. Pass args as a list:
 
 ```
-args: ["status", "-s"]                    # safe, runs through
-args: ["branch", "-D", "main"]             # rejected (protected)
-args: ["push", "--force", "origin", "main"] # rejected (destructive)
+args: ["--help"]   # safe, passes through
+{{EXAMPLE_DESTRUCTIVE_ARGS}}
 ```
 
 Set `allow_unsafe: true` to bypass the gate. **Only do this when the
 user has explicitly confirmed the operation is intended.** The
-rejection message will name the specific protected fact; relay that
-to the user before overriding.
+rejection message will name the specific destructive op or protected
+resource; relay that to the user before overriding.
 
 ### `{{TOOL_NAME}}_describe_gate`
 
