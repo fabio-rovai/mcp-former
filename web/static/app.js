@@ -239,10 +239,13 @@ async function runWrapURL() {
     $("#hint-url").textContent = "must be a github.com URL";
     return;
   }
+  const useLLM = $("#use-llm-url").checked;
   $("#wrap-url-btn").disabled = true;
-  $("#hint-url").textContent = "cloning + introspecting…";
+  $("#hint-url").textContent = useLLM
+    ? "cloning + LLM-generating ontology…"
+    : "cloning + introspecting…";
   showOutput();
-  await streamSSE("/api/wrap", {target: url},
+  await streamSSE("/api/wrap", {target: url, use_llm: useLLM},
     {
       ...baseHandlers,
       bundle_ready: (p) => {

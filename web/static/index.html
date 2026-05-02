@@ -69,22 +69,30 @@
     <div class="tab-panel hidden" id="tab-url">
       <h3>1. Paste a GitHub URL</h3>
       <p class="lede" style="font-size: 14px; margin-top: 0;">
-        Best-effort introspection: clones the repo, detects the binary
-        (Cargo.toml, package.json, pyproject.toml, go.mod, ...), runs
-        <code>--help</code> if available, and emits a stub bundle you
-        can tighten by editing.
+        Clones the repo, detects the binary (Cargo.toml, package.json,
+        pyproject.toml, setup.py, go.mod, …), reads README + runs
+        <code>--help</code> if available. With <strong>LLM</strong>
+        enabled the ontology is auto-generated and validated through
+        <a href="https://github.com/fabio-rovai/open-ontologies">open-ontologies</a>;
+        otherwise emits a stub you can edit.
       </p>
       <input type="text" id="github-url" class="text-input"
         placeholder="https://github.com/owner/repo"
         spellcheck="false"
         autocapitalize="off">
 
+      <label class="opt">
+        <input type="checkbox" id="use-llm-url">
+        <span>Auto-generate ontology via LLM (needs
+        <code>ANTHROPIC_API_KEY</code> on server)</span>
+      </label>
+
       <div class="actions">
         <button id="wrap-url-btn" class="btn primary">
           Generate MCP bundle →
         </button>
         <span class="hint" id="hint-url">
-          stub generation only; refine the ontology before production
+          paste a public github.com URL above
         </span>
       </div>
     </div>

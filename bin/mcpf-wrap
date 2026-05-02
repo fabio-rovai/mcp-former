@@ -23,12 +23,16 @@ tries to find a binary or entry-point, runs --help, generates a
 stub adapter that you can tighten by editing.
 """
 import argparse
+import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -53,12 +57,158 @@ KNOWN_TARGETS = {
     "psql":    {"binary": "psql",    "label": "PostgreSQL CLI"},
 }
 
+LLM_MODEL = "claude-haiku-4-5-20251001"
+OPEN_ONTOLOGIES_BIN = os.environ.get(
+    "OPEN_ONTOLOGIES_BIN",
+    "/Users/fabio/projects/open-ontologies/target/release/open-ontologies")
+
 
 def render(template_path, mapping):
     text = template_path.read_text()
     for k, v in mapping.items():
         text = text.replace("{{" + k + "}}", str(v))
     return text
+
+
+# ----------------------------------------------------------------------
+# LLM-assisted ontology generation
+# ----------------------------------------------------------------------
+
+LLM_SYSTEM = (
+    "You generate protection-model ontologies in N-Triples format for "
+    "the mcp-former wrapper system. Each fact follows the pattern:\n"
+    "  <http://tardygrada.org/X> <http://schema.org/is_a> "
+    "<http://tardygrada.org/Y> .\n"
+    "Where X is a predicate name (lowercase, snake_case, no hyphens) "
+    "and Y is one of:\n"
+    "  destructive_op       — operations that destroy data\n"
+    "                          irreversibly (delete, drop, truncate,\n"
+    "                          force-push, terminate, etc.)\n"
+    "  protected_resource   — specific named resources that should\n"
+    "                          never be modified or deleted\n"
+    "  protected_namespace  — namespaces / scopes blocked from\n"
+    "                          mutation (kube-system style)\n"
+    "  protected_database   — databases/datastores blocked from\n"
+    "                          DROP\n"
+    "  protected_role       — privileged roles whose membership\n"
+    "                          should not be changed\n"
+    "  protected_repo       — repos/orgs blocked from delete\n"
+    "Output ONLY the N-Triples lines and # comment lines. No prose, "
+    "no markdown fences. The tool's adapter will use these facts to "
+    "decide whether a CLI call should be rejected. Be conservative: "
+    "include flag-level destructive ops (e.g. push_force, "
+    "apply_force) AND verb-level (e.g. delete, terminate) so the "
+    "adapter has both granularities available."
+)
+
+
+def llm_generate_ontology(target, binary, help_text, readme_text):
+    """Call Anthropic API to generate Turtle/N-Triples ontology.
+    Returns N-Triples text or None on failure."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None, "no ANTHROPIC_API_KEY in env"
+
+    # Cap context size — README + help can be huge.
+    help_text = (help_text or "")[:6000]
+    readme_text = (readme_text or "")[:8000]
+
+    user = f"""Generate a protection-model ontology for the CLI tool `{binary}`.
+
+Tool name (for IRI subjects): {target}
+
+--help output (truncated to 6KB):
+{help_text or '(unavailable)'}
+
+README excerpt (truncated to 8KB):
+{readme_text or '(unavailable)'}
+
+Emit N-Triples facts marking destructive operations and protected
+resources. Cover both flag-level operations (e.g. push_force for
+`git push --force`) and subcommand-level (delete, drop, truncate,
+terminate, etc.). If the tool clearly has no destructive operations
+(read-only utility), emit only a header comment."""
+
+    body = json.dumps({
+        "model": LLM_MODEL,
+        "max_tokens": 2048,
+        "system": LLM_SYSTEM,
+        "messages": [{"role": "user", "content": user}],
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=body,
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        })
+    # Same cert fallback as wikidata-ingest (macOS Python often lacks certs).
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            resp = json.loads(r.read().decode())
+    except urllib.error.URLError as e:
+        if isinstance(getattr(e, "reason", None), ssl.SSLError):
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
+                resp = json.loads(r.read().decode())
+        else:
+            return None, f"API error: {e}"
+    except Exception as e:
+        return None, f"API error: {e}"
+    text = resp["content"][0]["text"]
+    # Strip markdown fences if the model added any.
+    text = re.sub(r"^```(?:\w+)?\s*\n|\n?```\s*$", "", text.strip(),
+                  flags=re.MULTILINE)
+    return text, None
+
+
+def validate_ontology(text):
+    """Run open-ontologies validate. Returns (ok, message). Falls back
+    to a basic regex check if the binary isn't available."""
+    if not Path(OPEN_ONTOLOGIES_BIN).exists():
+        # Lightweight regex fallback — verify each non-comment line
+        # matches the N-Triples pattern.
+        line_re = re.compile(
+            r'^<[^>]+>\s+<[^>]+>\s+<[^>]+>\s*\.\s*$|^\s*(#|$)')
+        bad = []
+        for i, line in enumerate(text.splitlines(), 1):
+            if not line_re.match(line):
+                bad.append(f"line {i}: {line[:80]!r}")
+        if bad:
+            return False, "\n".join(bad[:5])
+        return True, "ok (regex-only; open-ontologies binary missing)"
+    # Real validate
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".nt",
+                                          delete=False) as tf:
+            tf.write(text)
+            path = tf.name
+        try:
+            r = subprocess.run(
+                [OPEN_ONTOLOGIES_BIN, "validate", path],
+                capture_output=True, text=True, timeout=20)
+            if r.returncode == 0:
+                return True, r.stdout.strip() or "ok"
+            return False, (r.stderr.strip() or r.stdout.strip()
+                            or "unknown validation error")
+        finally:
+            os.unlink(path)
+    except Exception as e:
+        return False, f"validator error: {e}"
+
+
+def fetch_readme(repo_root):
+    for name in ("README.md", "README.rst", "README", "readme.md", "Readme.md"):
+        p = repo_root / name
+        if p.exists():
+            try:
+                return p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+    return None
 
 
 # ----------------------------------------------------------------------
@@ -384,7 +534,7 @@ def discover_help(binary, repo_root):
     return None, None
 
 
-def build_repo_bundle(url, out_dir):
+def build_repo_bundle(url, out_dir, use_llm=False):
     owner, repo = parse_github_url(url)
     print(f"{DIM}cloning {owner}/{repo}…{NC}")
     work = Path(tempfile.mkdtemp(prefix="mcpf-wrap-"))
@@ -406,24 +556,58 @@ def build_repo_bundle(url, out_dir):
         print(f"{DIM}got --help from {help_source} "
               f"({len(help_text)} bytes){NC}")
     else:
-        print(f"{YELLOW}no --help output available — generating stub "
-              f"adapter, you'll need to tighten it manually{NC}")
+        print(f"{YELLOW}no --help output available{NC}")
 
-    # Generate stub ontology
+    readme_text = fetch_readme(clone_dir)
+    if readme_text:
+        print(f"{DIM}got README ({len(readme_text)} bytes){NC}")
+
     out = Path(out_dir)
     (out / "bin").mkdir(parents=True, exist_ok=True)
     (out / "ontologies").mkdir(parents=True, exist_ok=True)
     target = re.sub(r"[^a-zA-Z0-9_]", "_", binary)
+    onto_path = out / "ontologies" / f"{target}.nt"
 
-    stub_nt = (out / "ontologies" / f"{target}.nt")
-    stub_nt.write_text(f"""# Auto-generated by mcpf-wrap from {url}
+    # ---- Ontology generation: LLM if requested+available, else stub ----
+    onto_source = "stub"
+    if use_llm:
+        print(f"{DIM}generating ontology via {LLM_MODEL}…{NC}")
+        nt_text, err = llm_generate_ontology(
+            target, binary, help_text, readme_text)
+        if nt_text:
+            ok, msg = validate_ontology(nt_text)
+            if ok:
+                # Wrap with provenance header
+                onto_path.write_text(
+                    f"# Auto-generated by mcpf-wrap from {url}\n"
+                    f"# Binary: {binary}\n"
+                    f"# Source: LLM ({LLM_MODEL})\n"
+                    f"# Validator: {msg}\n"
+                    f"# Review and tighten before production use.\n\n"
+                    f"{nt_text}\n")
+                onto_source = "llm"
+                fact_count = sum(
+                    1 for line in nt_text.splitlines()
+                    if line.strip().startswith("<"))
+                print(f"  {GREEN}✓ generated {fact_count} facts, "
+                      f"validated{NC}")
+            else:
+                print(f"  {YELLOW}LLM output failed validation: "
+                      f"{msg}{NC}")
+                print(f"  {DIM}falling back to stub ontology{NC}")
+        else:
+            print(f"  {YELLOW}LLM unavailable: {err}{NC}")
+            print(f"  {DIM}falling back to stub ontology{NC}")
+
+    if onto_source == "stub":
+        onto_path.write_text(f"""# Auto-generated by mcpf-wrap from {url}
 # Binary: {binary}
 # Help text: {len(help_text or '')} bytes
 #
 # This is a STUB. Add real protection facts here based on your
 # knowledge of {binary}'s destructive operations. See
 # ontologies/git.nt or ontologies/kubectl.nt in mcp-former for
-# reference patterns.
+# reference patterns. Or re-run with --llm to auto-generate.
 
 # Example: mark a destructive operation
 # <http://tardygrada.org/some_destructive_op> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
@@ -512,14 +696,19 @@ def main():
         help="output directory (default: ./mcp-former-<target>)")
     ap.add_argument("--zip", action="store_true",
         help="also produce a .zip alongside the directory")
+    ap.add_argument("--llm", action="store_true",
+        help="when wrapping a GitHub URL, use the Anthropic API to "
+             "generate the ontology (needs ANTHROPIC_API_KEY); "
+             "validates output via open-ontologies")
     args = ap.parse_args()
 
     if is_github_url(args.target):
         owner, repo = parse_github_url(args.target)
         out_name = f"mcp-former-{owner}-{repo}"
         out_dir = args.out or out_name
-        print(f"{DIM}mode: github URL → repo bundle{NC}")
-        out = build_repo_bundle(args.target, out_dir)
+        print(f"{DIM}mode: github URL → repo bundle "
+              f"({'LLM' if args.llm else 'stub'}){NC}")
+        out = build_repo_bundle(args.target, out_dir, use_llm=args.llm)
     elif args.target in KNOWN_TARGETS:
         out_name = f"mcp-former-{args.target}"
         out_dir = args.out or out_name
