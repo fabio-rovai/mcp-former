@@ -5,6 +5,10 @@ mcpf — top-level CLI for mcp-former.
 Subcommands:
     list                 list wrappers in the registry
     install NAME         install a wrapper bundle into ./wrappers/NAME
+                          and auto-load its ontology into the running
+                          tardygrada daemon
+    reload NAME          re-submit a wrapper's ontology to the running
+                          daemon (after editing it)
     show NAME            show full registry record for NAME
     plan TARGET          introspect target software, emit a Terraform-
                           style plan against ontologies/TARGET.nt
@@ -68,7 +72,7 @@ def main():
     if sub == "wrap":
         target = os.path.join(BIN, "mcpf-wrap")
         os.execv(target, [target] + rest)
-    if sub in ("list", "install", "show"):
+    if sub in ("list", "install", "show", "reload"):
         # Registry subcommands — dispatch to mcpf-registry
         target = os.path.join(BIN, "mcpf-registry")
         os.execv(target, [target, sub] + rest)
