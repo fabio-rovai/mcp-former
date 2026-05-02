@@ -101,6 +101,12 @@ def claim_grounded(claim):
 # ----------------------------------------------------------------------
 
 def gate_branch(args):
+    """Domain-aware variant: queries against the OWL :ProtectedThing
+    superclass. After OWL-RL closure, anything that's a :ProtectedBranch
+    is also a :ProtectedRef and a :ProtectedThing — so a single
+    `is a protected_thing` query covers branches, tags, refs, and any
+    future protected category we add to the schema. The gate doesn't
+    need to know about each subclass."""
     delete = False
     targets = []
     for a in args:
@@ -116,10 +122,25 @@ def gate_branch(args):
     if not delete or not targets:
         return True, "read-only branch operation", None
     for tgt in targets:
-        ok, resp = claim_grounded(f"{tgt} is a protected_branch")
+        # Domain-aware: protected_thing covers ProtectedBranch ∪ ProtectedRef ∪
+        # any future subclass — added without touching this code.
+        ok, resp = claim_grounded(f"{tgt} is a protected_thing")
         if ok:
-            return False, f"{tgt} is a protected_branch", resp
-    return True, "no protected branches in target list", None
+            # Surface the most-specific subclass for the message — try
+            # the common ones individually so we don't depend on
+            # response order. Fall back to "protected_thing".
+            specific = "protected_thing"
+            for cls in ("protected_branch", "protected_ref",
+                        "protected_resource", "protected_namespace",
+                        "protected_repo", "protected_tag"):
+                sub_resp = daemon_query(f"{tgt} is a {cls}")
+                if sub_resp and sub_resp.get("result") == "VERIFIED":
+                    if any(t.get("status") == "grounded"
+                           for t in sub_resp.get("triples", [])):
+                        specific = cls
+                        break
+            return False, f"{tgt} is a {specific}", resp
+    return True, "no protected refs in target list", None
 
 
 def gate_push(args):

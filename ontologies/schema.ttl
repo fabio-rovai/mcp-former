@@ -105,6 +105,115 @@
 
 
 # ============================================================================
+# Domain layer — what the wrapped tool actually manipulates.
+# Separate from the protection layer above: an instance can be both
+# a domain class AND a protection class (e.g. :main is :Branch AND
+# :ProtectedBranch). OWL-RL closure keeps both inheritance chains
+# available at query time.
+# ============================================================================
+
+:Resource a owl:Class ;
+    rdfs:label "Resource" ;
+    rdfs:comment """A thing in a target system's domain (a git branch, a kubernetes pod, an AWS instance, a postgres table, ...). Subclassed per-tool.""" .
+
+# Git domain
+:GitObject  a owl:Class ; rdfs:subClassOf :Resource ;
+            rdfs:label "Git Object" .
+:Ref        a owl:Class ; rdfs:subClassOf :GitObject ;
+            rdfs:label "Ref" ;
+            rdfs:comment "A named pointer (branch, tag, HEAD)." .
+:Branch     a owl:Class ; rdfs:subClassOf :Ref ;
+            rdfs:label "Branch" .
+:Tag        a owl:Class ; rdfs:subClassOf :Ref ;
+            rdfs:label "Tag" .
+:Commit     a owl:Class ; rdfs:subClassOf :GitObject ;
+            rdfs:label "Commit" .
+:WorkingTree a owl:Class ; rdfs:subClassOf :GitObject ;
+            rdfs:label "Working Tree" .
+
+# Kubectl domain
+:KubernetesResource a owl:Class ; rdfs:subClassOf :Resource ;
+            rdfs:label "Kubernetes Resource" .
+:Namespace  a owl:Class ; rdfs:subClassOf :KubernetesResource ;
+            rdfs:label "Namespace" .
+:Pod        a owl:Class ; rdfs:subClassOf :KubernetesResource ;
+            rdfs:label "Pod" .
+:Deployment a owl:Class ; rdfs:subClassOf :KubernetesResource ;
+            rdfs:label "Deployment" .
+:Service    a owl:Class ; rdfs:subClassOf :KubernetesResource ;
+            rdfs:label "Service" .
+:Node       a owl:Class ; rdfs:subClassOf :KubernetesResource ;
+            rdfs:label "Node" .
+:Cluster    a owl:Class ; rdfs:subClassOf :KubernetesResource ;
+            rdfs:label "Cluster" .
+
+# AWS domain
+:AwsResource a owl:Class ; rdfs:subClassOf :Resource ;
+            rdfs:label "AWS Resource" .
+:AwsService    a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "AWS Service" .
+:Ec2Instance   a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "EC2 Instance" .
+:S3Bucket      a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "S3 Bucket" .
+:RdsInstance   a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "RDS DB Instance" .
+:LambdaFn      a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "Lambda Function" .
+:CfnStack      a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "CloudFormation Stack" .
+:IamPrincipal  a owl:Class ; rdfs:subClassOf :AwsResource ;
+               rdfs:label "IAM Principal" .
+
+# gh (GitHub CLI) domain
+:GhResource a owl:Class ; rdfs:subClassOf :Resource ;
+            rdfs:label "GitHub Resource" .
+:Repo       a owl:Class ; rdfs:subClassOf :GhResource ;
+            rdfs:label "GitHub Repository" .
+:Release    a owl:Class ; rdfs:subClassOf :GhResource ;
+            rdfs:label "GitHub Release" .
+:Issue      a owl:Class ; rdfs:subClassOf :GhResource ;
+            rdfs:label "GitHub Issue" .
+:Secret     a owl:Class ; rdfs:subClassOf :GhResource ;
+            rdfs:label "GitHub Secret" .
+:Codespace  a owl:Class ; rdfs:subClassOf :GhResource ;
+            rdfs:label "Codespace" .
+
+# PostgreSQL domain
+:PsqlResource a owl:Class ; rdfs:subClassOf :Resource ;
+            rdfs:label "PostgreSQL Resource" .
+:Database  a owl:Class ; rdfs:subClassOf :PsqlResource ;
+           rdfs:label "Database" .
+:DbSchema  a owl:Class ; rdfs:subClassOf :PsqlResource ;
+           rdfs:label "Schema" .
+:Table     a owl:Class ; rdfs:subClassOf :PsqlResource ;
+           rdfs:label "Table" .
+:Role      a owl:Class ; rdfs:subClassOf :PsqlResource ;
+           rdfs:label "Role" .
+:Extension a owl:Class ; rdfs:subClassOf :PsqlResource ;
+           rdfs:label "Extension" .
+
+
+# ============================================================================
+# Operation→Target plumbing — links operation classes to the resource
+# class they act on, so a generic runner can decompose CLI args without
+# per-tool hard-coding.
+# ============================================================================
+
+:targetClass a owl:ObjectProperty ;
+    rdfs:label "operates on instances of class" ;
+    rdfs:domain :Operation ;
+    rdfs:range owl:Class ;
+    rdfs:comment """Declares the resource class an operation targets. The verification gate uses this to know what kind of thing to resolve when parsing CLI args.""" .
+
+:cliFlag a owl:DatatypeProperty ;
+    rdfs:label "CLI flag pattern" ;
+    rdfs:domain :Operation ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A flag fragment that triggers this operation. Multiple cliFlag values are AND-combined for matching." .
+
+
+# ============================================================================
 # Per-tool DestructiveOp subclasses — narrow enough that
 # adapters can query at the right granularity
 # ============================================================================

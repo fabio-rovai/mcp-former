@@ -2,8 +2,8 @@
 # Source: schema.ttl
 # Source: psql.ttl
 # Reasoning: rdflib + owlrl OWL-RL profile
-# Stats: 99 schema + 46 A-Box → 517 after reasoning (+372 inferred)
-# Output: 50 flat `is_a` triples (subclass closure included)
+# Stats: 212 schema + 54 A-Box → 900 after reasoning (+634 inferred)
+# Output: 72 flat `is_a` triples (subclass closure included)
 # DO NOT EDIT — regenerate with `mcpf materialize psql`.
 
 <http://tardygrada.org/AwsTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
@@ -35,21 +35,43 @@
 <http://tardygrada.org/grant_superuser> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
 <http://tardygrada.org/grant_superuser> <http://schema.org/is_a> <http://tardygrada.org/operation> .
 <http://tardygrada.org/grant_superuser> <http://schema.org/is_a> <http://tardygrada.org/psql_destructive_op> .
+<http://tardygrada.org/information_schema> <http://schema.org/is_a> <http://tardygrada.org/db_schema> .
 <http://tardygrada.org/information_schema> <http://schema.org/is_a> <http://tardygrada.org/protected_schema> .
 <http://tardygrada.org/information_schema> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/information_schema> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/information_schema> <http://schema.org/is_a> <http://tardygrada.org/resource> .
+<http://tardygrada.org/pg_catalog> <http://schema.org/is_a> <http://tardygrada.org/db_schema> .
 <http://tardygrada.org/pg_catalog> <http://schema.org/is_a> <http://tardygrada.org/protected_schema> .
 <http://tardygrada.org/pg_catalog> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/pg_catalog> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/pg_catalog> <http://schema.org/is_a> <http://tardygrada.org/resource> .
+<http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/database> .
 <http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/protected_database> .
 <http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/protected_role> .
 <http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/resource> .
+<http://tardygrada.org/postgres> <http://schema.org/is_a> <http://tardygrada.org/role> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/database> .
 <http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_database> .
 <http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/resource> .
 <http://tardygrada.org/rds_superuser> <http://schema.org/is_a> <http://tardygrada.org/protected_role> .
 <http://tardygrada.org/rds_superuser> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/rds_superuser> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/rds_superuser> <http://schema.org/is_a> <http://tardygrada.org/resource> .
+<http://tardygrada.org/rds_superuser> <http://schema.org/is_a> <http://tardygrada.org/role> .
+<http://tardygrada.org/template0> <http://schema.org/is_a> <http://tardygrada.org/database> .
 <http://tardygrada.org/template0> <http://schema.org/is_a> <http://tardygrada.org/protected_database> .
 <http://tardygrada.org/template0> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/template0> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/template0> <http://schema.org/is_a> <http://tardygrada.org/resource> .
+<http://tardygrada.org/template1> <http://schema.org/is_a> <http://tardygrada.org/database> .
 <http://tardygrada.org/template1> <http://schema.org/is_a> <http://tardygrada.org/protected_database> .
 <http://tardygrada.org/template1> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/template1> <http://schema.org/is_a> <http://tardygrada.org/psql_resource> .
+<http://tardygrada.org/template1> <http://schema.org/is_a> <http://tardygrada.org/resource> .
 <http://tardygrada.org/truncate> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
 <http://tardygrada.org/truncate> <http://schema.org/is_a> <http://tardygrada.org/operation> .
 <http://tardygrada.org/truncate> <http://schema.org/is_a> <http://tardygrada.org/psql_destructive_op> .

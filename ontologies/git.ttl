@@ -1,9 +1,9 @@
 # mcp-former git A-Box.
 #
-# Instances of the schema's classes for git's protection model. After
-# OWL-RL reasoning over (schema.ttl + this file), every instance also
-# inherits the parent classes — so e.g. :main rdf:type :ProtectedBranch
-# AND :ProtectedRef AND :ProtectedThing.
+# Each instance is multi-typed: a domain class (what it IS — Branch,
+# Ref, …) AND when applicable a protection class (whether it's gated
+# — ProtectedBranch, ProtectedRef, …). OWL-RL closure makes both
+# inheritance chains queryable.
 
 @prefix :     <http://tardygrada.org/mcpf/> .
 @prefix git:  <http://tardygrada.org/mcpf/git/> .
@@ -12,50 +12,73 @@
 
 
 # ----------------------------------------------------------------------
-# Protected refs / branches
+# Resources — multi-typed instances
 # ----------------------------------------------------------------------
 
-git:main    a :ProtectedBranch ;
+git:main    a :Branch, :ProtectedBranch ;
             rdfs:label "main" ;
             :rationale "Default branch in modern repos; production state." .
 
-git:master  a :ProtectedBranch ;
+git:master  a :Branch, :ProtectedBranch ;
             rdfs:label "master" ;
             :rationale "Legacy default branch; often production." .
 
-git:develop a :ProtectedBranch ;
+git:develop a :Branch, :ProtectedBranch ;
             rdfs:label "develop" ;
             :rationale "Standard integration branch in git-flow." .
 
-git:release a :ProtectedBranch ;
+git:release a :Branch, :ProtectedBranch ;
             rdfs:label "release" ;
             :rationale "Release candidate branch." .
 
-git:HEAD    a :ProtectedRef ;
+git:HEAD    a :Ref, :ProtectedRef ;
             rdfs:label "HEAD" ;
             :rationale "Current ref; must not be moved imperatively." .
 
 
 # ----------------------------------------------------------------------
-# Destructive operations — gated by mcpf-git
+# Operations — declare the target class for each, so the gate can
+# look up "what does this op operate on?"
 # ----------------------------------------------------------------------
 
 git:branch_delete    a :GitDestructiveOp ;
                      rdfs:label "git branch -d/-D" ;
-                     :tool :GitTool .
+                     :tool :GitTool ;
+                     :targetClass :Branch ;
+                     :cliFlag "branch" ;
+                     :cliFlag "-D" .
+
+git:tag_delete       a :GitDestructiveOp ;
+                     rdfs:label "git tag -d" ;
+                     :tool :GitTool ;
+                     :targetClass :Tag ;
+                     :cliFlag "tag" ;
+                     :cliFlag "-d" .
 
 git:push_force       a :GitDestructiveOp ;
                      rdfs:label "git push --force" ;
-                     :tool :GitTool .
+                     :tool :GitTool ;
+                     :targetClass :Ref ;
+                     :cliFlag "push" ;
+                     :cliFlag "--force" .
 
 git:reset_hard       a :GitDestructiveOp ;
                      rdfs:label "git reset --hard" ;
-                     :tool :GitTool .
+                     :tool :GitTool ;
+                     :targetClass :WorkingTree ;
+                     :cliFlag "reset" ;
+                     :cliFlag "--hard" .
 
 git:clean_force      a :GitDestructiveOp ;
                      rdfs:label "git clean -f" ;
-                     :tool :GitTool .
+                     :tool :GitTool ;
+                     :targetClass :WorkingTree ;
+                     :cliFlag "clean" ;
+                     :cliFlag "-f" .
 
 git:checkout_discard a :GitDestructiveOp ;
                      rdfs:label "git checkout -- PATH" ;
-                     :tool :GitTool .
+                     :tool :GitTool ;
+                     :targetClass :WorkingTree ;
+                     :cliFlag "checkout" ;
+                     :cliFlag "--" .

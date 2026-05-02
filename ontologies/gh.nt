@@ -2,8 +2,8 @@
 # Source: schema.ttl
 # Source: gh.ttl
 # Reasoning: rdflib + owlrl OWL-RL profile
-# Stats: 99 schema + 31 A-Box → 475 after reasoning (+345 inferred)
-# Output: 36 flat `is_a` triples (subclass closure included)
+# Stats: 212 schema + 33 A-Box → 842 after reasoning (+597 inferred)
+# Output: 42 flat `is_a` triples (subclass closure included)
 # DO NOT EDIT — regenerate with `mcpf materialize gh`.
 
 <http://tardygrada.org/AwsTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
@@ -23,10 +23,16 @@
 <http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
 <http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
 <http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/gh_resource> .
 <http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
 <http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/repo> .
+<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/resource> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/gh_resource> .
 <http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
 <http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/repo> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/resource> .
 <http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
 <http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
 <http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .

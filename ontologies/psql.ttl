@@ -8,28 +8,28 @@
 
 # Protected databases
 
-<http://tardygrada.org/postgres>       a :ProtectedDatabase ;
+<http://tardygrada.org/postgres>       a :Database, :ProtectedDatabase ;
     rdfs:label "postgres" ;
     :rationale "Default cluster database." .
-<http://tardygrada.org/template0>      a :ProtectedDatabase ;
+<http://tardygrada.org/template0>      a :Database, :ProtectedDatabase ;
     rdfs:label "template0" .
-<http://tardygrada.org/template1>      a :ProtectedDatabase ;
+<http://tardygrada.org/template1>      a :Database, :ProtectedDatabase ;
     rdfs:label "template1" .
-<http://tardygrada.org/production>     a :ProtectedDatabase ;
+<http://tardygrada.org/production>     a :Database, :ProtectedDatabase ;
     rdfs:label "production" .
 
 # Protected schemas
 
-<http://tardygrada.org/pg_catalog>          a :ProtectedSchema ;
+<http://tardygrada.org/pg_catalog>          a :DbSchema, :ProtectedSchema ;
     rdfs:label "pg_catalog" .
-<http://tardygrada.org/information_schema>  a :ProtectedSchema ;
+<http://tardygrada.org/information_schema>  a :DbSchema, :ProtectedSchema ;
     rdfs:label "information_schema" .
 
-# Protected roles (the same `postgres` IRI gets ProtectedDatabase
-# above; OWL handles overlap fine — multiple types).
+# Protected roles (the same `postgres` IRI is also Database above —
+# OWL handles overlap fine; multi-typing makes each query path work.)
 
-<http://tardygrada.org/postgres>        a :ProtectedRole .
-<http://tardygrada.org/rds_superuser>   a :ProtectedRole ;
+<http://tardygrada.org/postgres>        a :Role, :ProtectedRole .
+<http://tardygrada.org/rds_superuser>   a :Role, :ProtectedRole ;
     rdfs:label "rds_superuser" .
 
 

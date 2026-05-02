@@ -8,9 +8,9 @@
 
 # Protected repos / orgs (extend per deployment)
 
-<http://tardygrada.org/main_app>     a :ProtectedRepo ;
+<http://tardygrada.org/main_app>     a :Repo, :ProtectedRepo ;
     rdfs:label "main-app" .
-<http://tardygrada.org/production>   a :ProtectedRepo ;
+<http://tardygrada.org/production>   a :Repo, :ProtectedRepo ;
     rdfs:label "production" .
 
 

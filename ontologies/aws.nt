@@ -2,7 +2,7 @@
 # Source: schema.ttl
 # Source: aws.ttl
 # Reasoning: rdflib + owlrl OWL-RL profile
-# Stats: 99 schema + 64 A-Box → 566 after reasoning (+403 inferred)
+# Stats: 212 schema + 64 A-Box → 927 after reasoning (+651 inferred)
 # Output: 68 flat `is_a` triples (subclass closure included)
 # DO NOT EDIT — regenerate with `mcpf materialize aws`.
 
