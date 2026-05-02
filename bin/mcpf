@@ -19,6 +19,12 @@ Subcommands:
     onto TARGET|all      run OWL-RL reasoning over a wrapper's
                           schema.ttl + TARGET.ttl and regenerate the
                           flat TARGET.nt that tardygrada loads
+    audit TARGET|PATH    pytest-style conformance test for a wrapper:
+                          checks sanity, existence (does each ontology
+                          op map to a real CLI subcommand?), coverage
+                          (any destructive verb in --help missing from
+                          the ontology?), and grounding (do the facts
+                          actually resolve in the running daemon?)
     git GIT-ARGS         drive git through the verification gate
     kubectl K8S-ARGS     drive kubectl through the verification gate
 
@@ -77,6 +83,9 @@ def main():
         os.execv(target, [target] + rest)
     if sub in ("materialize", "materialise", "onto"):
         target = os.path.join(BIN, "mcpf-materialize")
+        os.execv(target, [target] + rest)
+    if sub in ("audit", "test", "verify"):
+        target = os.path.join(BIN, "mcpf-audit")
         os.execv(target, [target] + rest)
     if sub in ("list", "install", "show", "reload"):
         # Registry subcommands — dispatch to mcpf-registry
