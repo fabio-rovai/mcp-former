@@ -1,10 +1,11 @@
 // mcp-former — single-page client.
+// One input field, auto-detects whether it's a built-in target name
+// or a GitHub URL.
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-let selectedTarget = null;
-let lastDownloadable = null;   // {endpoint, filename}
+let registryNames = new Set();   // populated from /api/registry
 
 // --- ANSI → HTML ----------------------------------------------------
 
@@ -50,7 +51,7 @@ function ansiToHtml(text) {
   return out;
 }
 
-// --- tabs ---------------------------------------------------------------
+// --- tabs -----------------------------------------------------------
 
 $$(".tab").forEach((t) => {
   t.addEventListener("click", () => {
@@ -62,12 +63,70 @@ $$(".tab").forEach((t) => {
   });
 });
 
-// --- full registry tab ---------------------------------------------
+// --- target detection -----------------------------------------------
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function detectTargetType(value) {
+  const v = value.trim();
+  if (!v) return {kind: "empty"};
+  if (/^https?:\/\/github\.com\/[^/]+\/[^/]+/.test(v)) {
+    return {kind: "url", value: v};
+  }
+  // Allow shorthand: github.com/owner/repo
+  if (/^github\.com\/[^/]+\/[^/]+/.test(v)) {
+    return {kind: "url", value: "https://" + v};
+  }
+  if (registryNames.has(v)) {
+    return {kind: "builtin", value: v};
+  }
+  // Could be a built-in we don't know about, or a typo
+  return {kind: "unknown", value: v};
+}
+
+function updateDetected() {
+  const v = $("#target-input").value;
+  const det = detectTargetType(v);
+  const out = $("#target-detected");
+  const btn = $("#generate-btn");
+  switch (det.kind) {
+    case "empty":
+      out.innerHTML = "&nbsp;";
+      btn.disabled = true;
+      break;
+    case "url":
+      out.innerHTML =
+        `<span class="ansi-cyan">⤷</span> ` +
+        `<span class="ansi-dim">GitHub URL — will clone, detect ` +
+        `binary, generate ontology via LLM</span>`;
+      btn.disabled = false;
+      break;
+    case "builtin":
+      out.innerHTML =
+        `<span class="ansi-green">✓</span> ` +
+        `<span class="ansi-dim">built-in target — uses curated ` +
+        `ontology</span>`;
+      btn.disabled = false;
+      break;
+    case "unknown":
+      out.innerHTML =
+        `<span class="ansi-yellow">?</span> ` +
+        `<span class="ansi-dim">unknown name — must be a built-in ` +
+        `(${[...registryNames].join(", ")}) or a GitHub URL</span>`;
+      btn.disabled = true;
+      break;
+  }
+}
+
+// --- registry data --------------------------------------------------
+
+async function loadRegistry() {
+  const r = await fetch("/api/registry");
+  const data = await r.json();
+  registryNames = new Set(
+    data.wrappers
+      .filter((w) => w.status === "ready")
+      .map((w) => w.target));
+  // Prime the input to refresh detection state if user already typed
+  updateDetected();
 }
 
 let registryFullLoaded = false;
@@ -84,9 +143,9 @@ async function loadRegistryFull() {
   wrap.innerHTML = "";
   for (const w of data.wrappers) {
     const cats = (w.categories || [])
-      .map(c => `<span class="reg-cat">${escapeHtml(c)}</span>`).join("");
+      .map((c) => `<span class="reg-cat">${escapeHtml(c)}</span>`).join("");
     const gates = (w.gated_subcommands || [])
-      .map(g => `<li>${escapeHtml(g)}</li>`).join("");
+      .map((g) => `<li>${escapeHtml(g)}</li>`).join("");
     const card = document.createElement("div");
     card.className = "reg-card";
     card.innerHTML = `
@@ -102,56 +161,33 @@ async function loadRegistryFull() {
       </details>
       <div class="reg-install">$ mcpf install ${escapeHtml(w.name)}</div>
     `;
+    card.querySelector(".reg-name").style.cursor = "pointer";
+    card.querySelector(".reg-name").addEventListener("click", () => {
+      // Quick "Send to Generate" — populates the input + switches tab
+      $("#target-input").value = w.name;
+      updateDetected();
+      $$(".tab")[0].click();
+      $("#target-input").focus();
+    });
     wrap.appendChild(card);
   }
   registryFullLoaded = true;
 }
 
-// --- registry + presets ---------------------------------------------
-
-async function loadRegistry() {
-  const r = await fetch("/api/registry");
-  const data = await r.json();
-  const container = $("#presets");
-  container.innerHTML = "";
-  for (const w of data.wrappers) {
-    const div = document.createElement("div");
-    div.className = "preset" + (w.status === "stub" ? " stub" : "");
-    div.dataset.target = w.target;
-    div.innerHTML = `
-      <div class="name">
-        ${w.name}
-        <span class="badge ${w.status}">${w.status}</span>
-      </div>
-      <div class="desc">${w.description}</div>
-    `;
-    if (w.status === "ready") {
-      div.addEventListener("click", () => selectTarget(w.target));
-    }
-    container.appendChild(div);
-  }
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function selectTarget(target) {
-  selectedTarget = target;
-  $$(".preset").forEach((el) => {
-    el.classList.toggle("selected", el.dataset.target === target);
-  });
-  $("#plan-btn").disabled = false;
-  $("#wrap-btn").disabled = false;
-  $("#hint-builtin").textContent =
-    `${target} selected — Plan shows the diff; Wrap builds the bundle.`;
-}
+// --- streaming output ----------------------------------------------
 
-// --- shared output handling ----------------------------------------
-
-function showOutput(headerText) {
+function showOutput() {
   $("#output-card").classList.remove("hidden");
   $("#output-actions").classList.add("hidden");
   $("#output").innerHTML = "";
   $("#output-status").textContent = "running…";
   $("#output-status").className = "status running";
-  lastDownloadable = null;
 }
 
 function appendLine(html) {
@@ -223,39 +259,21 @@ const baseHandlers = {
   },
 };
 
-// --- 1. Plan flow (introspect for diff vs ontology) ----------------
+// --- main flow -----------------------------------------------------
 
-async function runPlan() {
-  if (!selectedTarget) return;
-  const useLLM = $("#use-llm").checked;
-  $("#plan-btn").disabled = true;
-  $("#wrap-btn").disabled = true;
+async function runGenerate() {
+  const det = detectTargetType($("#target-input").value);
+  if (det.kind === "empty" || det.kind === "unknown") return;
+
+  const backend =
+    document.querySelector('input[name="llm-backend"]:checked').value;
+
+  $("#generate-btn").disabled = true;
+  $("#hint-gen").textContent = "running…";
   showOutput();
-  await streamSSE("/api/introspect",
-    {target: selectedTarget, use_llm: useLLM},
-    {
-      ...baseHandlers,
-      done: (p) => {
-        const ok = p.exit_code === 0;
-        setDoneStatus(ok);
-        if (ok) {
-          attachDownload(`/api/download/${p.target}`,
-                          `mcp-former-${p.target}.zip`);
-        }
-        $("#hint-builtin").textContent = `${p.target} — ${ok ? "done" : "failed"}`;
-        $("#plan-btn").disabled = false;
-        $("#wrap-btn").disabled = false;
-      },
-    });
-}
 
-// --- 2. Wrap flow (full MCP bundle: adapter + ontology + server + skill) ---
-
-async function runWrap(target) {
-  $("#plan-btn").disabled = true;
-  $("#wrap-btn").disabled = true;
-  showOutput();
-  await streamSSE("/api/wrap", {target},
+  await streamSSE("/api/wrap",
+    {target: det.value, llm_backend: backend},
     {
       ...baseHandlers,
       bundle_ready: (p) => {
@@ -267,46 +285,10 @@ async function runWrap(target) {
       done: (p) => {
         const ok = p.exit_code === 0;
         setDoneStatus(ok);
-        $("#plan-btn").disabled = false;
-        $("#wrap-btn").disabled = false;
-      },
-    });
-}
-
-// --- 3. URL flow (paste github URL → wrap) ------------------------
-
-async function runWrapURL() {
-  const url = $("#github-url").value.trim();
-  if (!url) {
-    $("#hint-url").textContent = "paste a GitHub URL first";
-    return;
-  }
-  if (!/^https?:\/\/github\.com\//.test(url)) {
-    $("#hint-url").textContent = "must be a github.com URL";
-    return;
-  }
-  const useLLM = $("#use-llm-url").checked;
-  $("#wrap-url-btn").disabled = true;
-  $("#hint-url").textContent = useLLM
-    ? "cloning + LLM-generating ontology…"
-    : "cloning + introspecting…";
-  showOutput();
-  await streamSSE("/api/wrap", {target: url, use_llm: useLLM},
-    {
-      ...baseHandlers,
-      bundle_ready: (p) => {
-        attachDownload(`/api/download-bundle/${p.token}`, p.filename);
-        appendLine(
-          `<span class="ansi-green">bundle ready — ` +
-          `${p.filename}</span>`);
-      },
-      done: (p) => {
-        const ok = p.exit_code === 0;
-        setDoneStatus(ok);
-        $("#wrap-url-btn").disabled = false;
-        $("#hint-url").textContent =
-          ok ? "edit the stub ontology to add real protections"
-             : "failed — see output above";
+        $("#generate-btn").disabled = false;
+        $("#hint-gen").textContent =
+          ok ? "bundle generated" :
+               "failed — check the output above";
       },
     });
 }
@@ -333,15 +315,12 @@ async function checkHealth() {
 
 // --- bind ----------------------------------------------------------
 
-$("#plan-btn").addEventListener("click", runPlan);
-$("#wrap-btn").addEventListener("click", () => runWrap(selectedTarget));
-$("#wrap-url-btn").addEventListener("click", runWrapURL);
-$("#rerun-btn").addEventListener("click", () => {
-  // Re-run whichever tab is active
-  const activeTab = $(".tab.active").dataset.tab;
-  if (activeTab === "builtin") runWrap(selectedTarget);
-  else runWrapURL();
+$("#target-input").addEventListener("input", updateDetected);
+$("#target-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !$("#generate-btn").disabled) runGenerate();
 });
+$("#generate-btn").addEventListener("click", runGenerate);
+$("#rerun-btn").addEventListener("click", runGenerate);
 
 loadRegistry();
 checkHealth();

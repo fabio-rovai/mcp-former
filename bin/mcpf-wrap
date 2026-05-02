@@ -102,18 +102,10 @@ LLM_SYSTEM = (
 )
 
 
-def llm_generate_ontology(target, binary, help_text, readme_text):
-    """Call Anthropic API to generate Turtle/N-Triples ontology.
-    Returns N-Triples text or None on failure."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        return None, "no ANTHROPIC_API_KEY in env"
-
-    # Cap context size — README + help can be huge.
+def _build_user_prompt(target, binary, help_text, readme_text):
     help_text = (help_text or "")[:6000]
     readme_text = (readme_text or "")[:8000]
-
-    user = f"""Generate a protection-model ontology for the CLI tool `{binary}`.
+    return f"""Generate a protection-model ontology for the CLI tool `{binary}`.
 
 Tool name (for IRI subjects): {target}
 
@@ -129,6 +121,19 @@ resources. Cover both flag-level operations (e.g. push_force for
 terminate, etc.). If the tool clearly has no destructive operations
 (read-only utility), emit only a header comment."""
 
+
+def _strip_fences(text):
+    return re.sub(
+        r"^```(?:\w+)?\s*\n|\n?```\s*$", "", text.strip(),
+        flags=re.MULTILINE)
+
+
+def _generate_via_api(target, binary, help_text, readme_text):
+    """Call Anthropic API directly. Needs ANTHROPIC_API_KEY."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None, "no ANTHROPIC_API_KEY in env"
+    user = _build_user_prompt(target, binary, help_text, readme_text)
     body = json.dumps({
         "model": LLM_MODEL,
         "max_tokens": 2048,
@@ -143,7 +148,6 @@ terminate, etc.). If the tool clearly has no destructive operations
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         })
-    # Same cert fallback as wikidata-ingest (macOS Python often lacks certs).
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             resp = json.loads(r.read().decode())
@@ -158,11 +162,52 @@ terminate, etc.). If the tool clearly has no destructive operations
             return None, f"API error: {e}"
     except Exception as e:
         return None, f"API error: {e}"
-    text = resp["content"][0]["text"]
-    # Strip markdown fences if the model added any.
-    text = re.sub(r"^```(?:\w+)?\s*\n|\n?```\s*$", "", text.strip(),
-                  flags=re.MULTILINE)
-    return text, None
+    return _strip_fences(resp["content"][0]["text"]), None
+
+
+def _generate_via_claude_cli(target, binary, help_text, readme_text):
+    """Shell out to `claude -p` — uses the user's existing Claude Code
+    session, no API key needed. The prompt goes via stdin to avoid
+    flag-parsing collisions on long multi-line content."""
+    if not shutil.which("claude"):
+        return None, "claude CLI not on PATH"
+    user = _build_user_prompt(target, binary, help_text, readme_text)
+    cmd = [
+        "claude", "-p",
+        "--output-format", "text",
+        "--append-system-prompt", LLM_SYSTEM,
+        "--disallowedTools", "Bash,Edit,Write,WebSearch,WebFetch",
+    ]
+    try:
+        r = subprocess.run(
+            cmd, input=user, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        return None, "claude CLI timed out"
+    except Exception as e:
+        return None, f"claude CLI error: {e}"
+    if r.returncode != 0:
+        err = r.stderr.strip() or r.stdout.strip() or "non-zero exit"
+        return None, f"claude CLI error: {err[:200]}"
+    return _strip_fences(r.stdout), None
+
+
+def llm_generate_ontology(target, binary, help_text, readme_text,
+                            backend="auto"):
+    """Generate ontology via the chosen backend.
+       backend in {auto, api, claude-cli}.
+       'auto': try API if key set, else claude CLI, else fail."""
+    if backend == "api":
+        return _generate_via_api(target, binary, help_text, readme_text)
+    if backend == "claude-cli":
+        return _generate_via_claude_cli(target, binary, help_text,
+                                          readme_text)
+    # auto
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return _generate_via_api(target, binary, help_text, readme_text)
+    if shutil.which("claude"):
+        return _generate_via_claude_cli(target, binary, help_text,
+                                          readme_text)
+    return None, "no LLM backend available (set ANTHROPIC_API_KEY or install claude CLI)"
 
 
 def validate_ontology(text):
@@ -534,7 +579,7 @@ def discover_help(binary, repo_root):
     return None, None
 
 
-def build_repo_bundle(url, out_dir, use_llm=False):
+def build_repo_bundle(url, out_dir, llm_backend="auto"):
     owner, repo = parse_github_url(url)
     print(f"{DIM}cloning {owner}/{repo}…{NC}")
     work = Path(tempfile.mkdtemp(prefix="mcpf-wrap-"))
@@ -568,50 +613,44 @@ def build_repo_bundle(url, out_dir, use_llm=False):
     target = re.sub(r"[^a-zA-Z0-9_]", "_", binary)
     onto_path = out / "ontologies" / f"{target}.nt"
 
-    # ---- Ontology generation: LLM if requested+available, else stub ----
-    onto_source = "stub"
-    if use_llm:
-        print(f"{DIM}generating ontology via {LLM_MODEL}…{NC}")
-        nt_text, err = llm_generate_ontology(
-            target, binary, help_text, readme_text)
-        if nt_text:
-            ok, msg = validate_ontology(nt_text)
-            if ok:
-                # Wrap with provenance header
-                onto_path.write_text(
-                    f"# Auto-generated by mcpf-wrap from {url}\n"
-                    f"# Binary: {binary}\n"
-                    f"# Source: LLM ({LLM_MODEL})\n"
-                    f"# Validator: {msg}\n"
-                    f"# Review and tighten before production use.\n\n"
-                    f"{nt_text}\n")
-                onto_source = "llm"
-                fact_count = sum(
-                    1 for line in nt_text.splitlines()
-                    if line.strip().startswith("<"))
-                print(f"  {GREEN}✓ generated {fact_count} facts, "
-                      f"validated{NC}")
-            else:
-                print(f"  {YELLOW}LLM output failed validation: "
-                      f"{msg}{NC}")
-                print(f"  {DIM}falling back to stub ontology{NC}")
-        else:
-            print(f"  {YELLOW}LLM unavailable: {err}{NC}")
-            print(f"  {DIM}falling back to stub ontology{NC}")
+    # Ontology generation is MANDATORY for URL mode — never ship a
+    # stub bundle. If no LLM backend is available the wrap fails so
+    # the user is forced to set up a backend rather than getting
+    # silent fallback to a useless adapter.
+    print(f"{DIM}generating ontology via LLM (backend: "
+          f"{llm_backend})…{NC}")
+    nt_text, err = llm_generate_ontology(
+        target, binary, help_text, readme_text, backend=llm_backend)
+    if not nt_text:
+        shutil.rmtree(out, ignore_errors=True)
+        raise RuntimeError(
+            f"LLM ontology generation failed: {err}\n"
+            f"Set ANTHROPIC_API_KEY, install the `claude` CLI, or use "
+            f"a built-in target (git, kubectl, gh, aws, psql).")
 
-    if onto_source == "stub":
-        onto_path.write_text(f"""# Auto-generated by mcpf-wrap from {url}
-# Binary: {binary}
-# Help text: {len(help_text or '')} bytes
-#
-# This is a STUB. Add real protection facts here based on your
-# knowledge of {binary}'s destructive operations. See
-# ontologies/git.nt or ontologies/kubectl.nt in mcp-former for
-# reference patterns. Or re-run with --llm to auto-generate.
+    ok, msg = validate_ontology(nt_text)
+    if not ok:
+        # Don't ship invalid Turtle — surface the validator output so
+        # the user can see what the LLM produced.
+        bad_path = out / "ontologies" / f"{target}.invalid.nt"
+        bad_path.write_text(nt_text)
+        shutil.rmtree(out, ignore_errors=True)
+        raise RuntimeError(
+            f"LLM-generated ontology failed validation:\n  {msg}\n"
+            f"raw output saved to {bad_path} for inspection.")
 
-# Example: mark a destructive operation
-# <http://tardygrada.org/some_destructive_op> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-""")
+    onto_path.write_text(
+        f"# Auto-generated by mcpf-wrap from {url}\n"
+        f"# Binary: {binary}\n"
+        f"# Source: LLM (backend={llm_backend})\n"
+        f"# Validator: {msg}\n"
+        f"# Review and tighten before production use.\n\n"
+        f"{nt_text}\n")
+    fact_count = sum(
+        1 for line in nt_text.splitlines()
+        if line.strip().startswith("<"))
+    print(f"  {GREEN}✓ generated {fact_count} facts, "
+          f"validated{NC}")
 
     # Stub adapter — passes everything through with --explain logging
     stub_adapter = out / "bin" / f"mcpf-{target}"
@@ -696,10 +735,13 @@ def main():
         help="output directory (default: ./mcp-former-<target>)")
     ap.add_argument("--zip", action="store_true",
         help="also produce a .zip alongside the directory")
-    ap.add_argument("--llm", action="store_true",
-        help="when wrapping a GitHub URL, use the Anthropic API to "
-             "generate the ontology (needs ANTHROPIC_API_KEY); "
-             "validates output via open-ontologies")
+    ap.add_argument("--llm-via", choices=("auto", "api", "claude-cli"),
+        default="auto",
+        help="LLM backend for URL mode. auto (default): API if "
+             "ANTHROPIC_API_KEY is set, else claude CLI. "
+             "api: force Anthropic API. "
+             "claude-cli: force the local `claude` CLI (no API key "
+             "needed; uses your Claude Code session).")
     args = ap.parse_args()
 
     if is_github_url(args.target):
@@ -707,8 +749,13 @@ def main():
         out_name = f"mcp-former-{owner}-{repo}"
         out_dir = args.out or out_name
         print(f"{DIM}mode: github URL → repo bundle "
-              f"({'LLM' if args.llm else 'stub'}){NC}")
-        out = build_repo_bundle(args.target, out_dir, use_llm=args.llm)
+              f"(LLM backend={args.llm_via}){NC}")
+        try:
+            out = build_repo_bundle(args.target, out_dir,
+                                     llm_backend=args.llm_via)
+        except RuntimeError as e:
+            print(f"{RED}{e}{NC}", file=sys.stderr)
+            return 1
     elif args.target in KNOWN_TARGETS:
         out_name = f"mcp-former-{args.target}"
         out_dir = args.out or out_name

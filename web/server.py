@@ -193,7 +193,7 @@ async def introspect(req: Request):
                  "X-Accel-Buffering": "no"})
 
 
-async def stream_wrap(target_or_url: str, use_llm: bool = False):
+async def stream_wrap(target_or_url: str, llm_backend: str = "auto"):
     """Run `mcpf wrap <target>` as a subprocess in a temp dir, stream
     progress, then end with a 'bundle_ready' event carrying a path the
     caller can hit /api/download-bundle/<id> on."""
@@ -204,9 +204,8 @@ async def stream_wrap(target_or_url: str, use_llm: bool = False):
     if not wrap_bin.exists():
         yield sse("error", {"message": f"adapter binary missing: {wrap_bin}"})
         return
-    cmd = [str(wrap_bin), target_or_url, "--out", out_dir, "--zip"]
-    if use_llm:
-        cmd.append("--llm")
+    cmd = [str(wrap_bin), target_or_url, "--out", out_dir, "--zip",
+            "--llm-via", llm_backend]
     yield sse("start", {"target": target_or_url, "cmd": " ".join(cmd)})
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE,
@@ -239,11 +238,13 @@ BUNDLE_CACHE = {}
 async def wrap_target(req: Request):
     body = await req.json()
     target = body.get("target", "").strip()
-    use_llm = bool(body.get("use_llm", False))
+    llm_backend = body.get("llm_backend", "auto")
+    if llm_backend not in ("auto", "api", "claude-cli"):
+        llm_backend = "auto"
     if not target:
         raise HTTPException(status_code=400, detail="missing target")
     return StreamingResponse(
-        stream_wrap(target, use_llm=use_llm),
+        stream_wrap(target, llm_backend=llm_backend),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache",
                  "X-Accel-Buffering": "no"})

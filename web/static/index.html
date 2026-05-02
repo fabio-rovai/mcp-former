@@ -38,72 +38,60 @@
 
   <section class="form-card">
     <div class="tabs">
-      <button class="tab active" data-tab="builtin">Built-in target</button>
-      <button class="tab" data-tab="url">GitHub URL</button>
+      <button class="tab active" data-tab="generate">Generate</button>
       <button class="tab" data-tab="registry">Registry</button>
     </div>
 
-    <div class="tab-panel" id="tab-builtin">
-      <h3>1. Pick a target</h3>
-      <div class="presets" id="presets">
-        <div class="preset-loading">loading registry…</div>
-      </div>
-
-      <h3>2. Options</h3>
-      <label class="opt">
-        <input type="checkbox" id="use-llm">
-        <span>Use LLM classification (needs <code>ANTHROPIC_API_KEY</code>
-        on server; falls back to keyword heuristic)</span>
-      </label>
-
-      <div class="actions">
-        <button id="plan-btn" class="btn primary" disabled>
-          Plan diff →
-        </button>
-        <button id="wrap-btn" class="btn ghost" disabled>
-          Wrap as MCP bundle →
-        </button>
-        <span class="hint" id="hint-builtin">select a target above</span>
-      </div>
-    </div>
-
-    <div class="tab-panel hidden" id="tab-url">
-      <h3>1. Paste a GitHub URL</h3>
+    <div class="tab-panel" id="tab-generate">
+      <h3>Wrap any tool</h3>
       <p class="lede" style="font-size: 14px; margin-top: 0;">
-        Clones the repo, detects the binary (Cargo.toml, package.json,
-        pyproject.toml, setup.py, go.mod, …), reads README + runs
-        <code>--help</code> if available. With <strong>LLM</strong>
-        enabled the ontology is auto-generated and validated through
-        <a href="https://github.com/fabio-rovai/open-ontologies">open-ontologies</a>;
-        otherwise emits a stub you can edit.
+        Paste a built-in name (<code>git</code>, <code>kubectl</code>,
+        <code>gh</code>, <code>aws</code>, <code>psql</code>) <strong>or</strong>
+        any GitHub repo URL. Built-in names use the curated bundled
+        ontology. URLs trigger LLM ontology generation, validated
+        through <a href="https://github.com/fabio-rovai/open-ontologies">open-ontologies</a>.
       </p>
-      <input type="text" id="github-url" class="text-input"
-        placeholder="https://github.com/owner/repo"
+      <input type="text" id="target-input" class="text-input"
+        placeholder="git, kubectl, or https://github.com/owner/repo"
         spellcheck="false"
-        autocapitalize="off">
+        autocapitalize="off"
+        autocomplete="off">
+
+      <p class="hint" id="target-detected" style="margin: -4px 0 16px;">
+        &nbsp;
+      </p>
 
       <label class="opt">
-        <input type="checkbox" id="use-llm-url">
-        <span>Auto-generate ontology via LLM (needs
-        <code>ANTHROPIC_API_KEY</code> on server)</span>
+        <input type="radio" name="llm-backend" value="auto" checked>
+        <span><strong>Auto</strong> — use API if
+        <code>ANTHROPIC_API_KEY</code> is set, else the local
+        <code>claude</code> CLI</span>
+      </label>
+      <label class="opt">
+        <input type="radio" name="llm-backend" value="claude-cli">
+        <span><strong>Claude Code CLI</strong> — uses your existing
+        Claude Code session, no API key needed</span>
+      </label>
+      <label class="opt">
+        <input type="radio" name="llm-backend" value="api">
+        <span><strong>Anthropic API</strong> — requires
+        <code>ANTHROPIC_API_KEY</code> on the server</span>
       </label>
 
       <div class="actions">
-        <button id="wrap-url-btn" class="btn primary">
+        <button id="generate-btn" class="btn primary" disabled>
           Generate MCP bundle →
         </button>
-        <span class="hint" id="hint-url">
-          paste a public github.com URL above
-        </span>
+        <span class="hint" id="hint-gen">paste a target above</span>
       </div>
     </div>
 
     <div class="tab-panel hidden" id="tab-registry">
       <h3>Wrapper registry</h3>
       <p class="lede" style="font-size: 14px; margin-top: 0;">
-        Verified MCP wrappers shipped with mcp-former. Click a card
-        for the full record; use <code>mcpf install NAME</code> on
-        the CLI to materialise a bundle locally.
+        Verified MCP wrappers shipped with mcp-former. Use
+        <code>mcpf install NAME</code> on the CLI to materialise a
+        bundle locally.
       </p>
       <div id="registry-list" class="registry-grid">
         <div class="preset-loading">loading…</div>
