@@ -554,11 +554,25 @@ GO_COBRA_USE_RE = re.compile(
 GO_COBRA_SHORT_RE = re.compile(
     r'^\s*Short:\s*"([^"]+)"', re.MULTILINE)
 
+# Cobra-wrapper helpers — many projects (flyctl, cilium-cli, kubectl
+# subprojects) wrap cobra in a `command.New(usage, short, long, run)`
+# helper. The first positional arg is the usage line; the first word
+# is the subcommand name. Possibly preceded by `<receiver>.` so we
+# match `*.New(`, `*.NewCommand(`, `*.NewCmd(`, etc.
+GO_COBRA_HELPER_RE = re.compile(
+    r'(?:[a-zA-Z_][\w]*\.)?(?:New|NewCommand|NewCmd|NewSubCommand)\(\s*'
+    r'"([a-zA-Z][\w-]*)(?:\s+[<\[][^"]*)?"', re.MULTILINE)
+
 # mitchellh/cli — used by terraform, packer, vault. Pattern:
 #   "destroy": func() (cli.Command, error) { return &DestroyCommand{...
 GO_MITCHELLH_RE = re.compile(
     r'^\s*"([a-z][\w-]+)":\s*func\(\)\s*\(cli\.Command,\s*error\)',
     re.MULTILINE)
+
+# urfave/cli — used by docker, syncthing, drone. Pattern:
+#   {Name: "delete", ...}  inside cli.Command struct
+GO_URFAVE_RE = re.compile(
+    r'^\s*Name:\s*"([a-zA-Z][\w-]+)"', re.MULTILINE)
 
 RUST_CLAP_RE = re.compile(
     r'(?:Command::new\(\s*"([a-zA-Z][\w-]*)"|'
@@ -620,24 +634,50 @@ def extract_surface(repo_root):
                 # Skip test files — fixtures inflate the surface
                 if fname.endswith("_test.go"):
                     continue
-                # Cobra: pair Use: with neighbouring Short: line
-                use_matches = list(GO_COBRA_USE_RE.finditer(text))
                 short_matches = list(GO_COBRA_SHORT_RE.finditer(text))
-                for um in use_matches:
-                    name = um.group(1).split()[0]   # "list" from "list <args>"
+
+                def find_short(start_pos):
+                    for sm in short_matches:
+                        if 0 < sm.start() - start_pos < 600:
+                            return sm.group(1)[:120]
+                    return ""
+
+                # Cobra: pair Use: with neighbouring Short: line
+                for um in GO_COBRA_USE_RE.finditer(text):
+                    name = um.group(1).split()[0]
                     if name in COBRA_FALSE_POSITIVES:
                         continue
-                    # Find the Short: line within ~10 lines after Use:
-                    short = ""
-                    for sm in short_matches:
-                        if 0 < sm.start() - um.start() < 600:
-                            short = sm.group(1)[:120]
-                            break
-                    found.setdefault("cobra", []).append((name, short))
+                    found.setdefault("cobra", []).append(
+                        (name, find_short(um.start())))
+
+                # Cobra-wrapper helpers — `command.New("usage <args>", ...)`
+                for hm in GO_COBRA_HELPER_RE.finditer(text):
+                    name = hm.group(1).split()[0]
+                    if name in COBRA_FALSE_POSITIVES:
+                        continue
+                    # Heuristic: only count when the call is on its own
+                    # line or assigned (avoid false matches in tests/
+                    # docs blocks). A weak signal: previous 2 chars are
+                    # one of `=`, `:=`, `,`, `(`, `\n`, ` `.
+                    found.setdefault("cobra", []).append(
+                        (name, find_short(hm.start())))
+
                 # mitchellh/cli (terraform, vault, packer)
                 for m in GO_MITCHELLH_RE.finditer(text):
                     found.setdefault("mitchellh-cli", []).append(
                         (m.group(1), ""))
+
+                # urfave/cli (docker, syncthing) — Name: in a Command
+                # struct, but only count when likely-CLI context.
+                # Cheap heuristic: file references "urfave/cli" or
+                # "github.com/urfave".
+                if ("urfave/cli" in text or "urfave\\/cli" in text):
+                    for m in GO_URFAVE_RE.finditer(text):
+                        name = m.group(1)
+                        if name in COBRA_FALSE_POSITIVES:
+                            continue
+                        found.setdefault("urfave-cli", []).append(
+                            (name, find_short(m.start())))
             elif ext == ".rs":
                 for m in RUST_CLAP_RE.finditer(text):
                     name = m.group(1) or m.group(2) or m.group(3)
