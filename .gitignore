@@ -11,3 +11,8 @@ ontologies/*.local.nt
 
 # tardygrada daemon writes this when started with mcp-former as cwd
 tests/learned_ontology.nt
+
+# YC application drafts — never public
+YC-APPLICATION.md
+yc-application.md
+yc-*.md
