@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>mcp-former — Terraform for legacy software → AI agents</title>
+  <title>mcp-former — turn any GitHub repo into an MCP server</title>
+  <meta name="description" content="Download a repo, map what it does as a graph, rebuild it as MCP. Universal converter from any CLI to a verifiable MCP wrapper.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -11,15 +14,12 @@
 <header>
   <div class="container">
     <div class="brand">
-      <div class="logo">▰▰</div>
-      <div>
-        <h1>mcp-former</h1>
-        <p class="tagline">Terraform for legacy software → AI agents.</p>
-      </div>
+      <span class="brand-mark">▰</span>
+      <span>mcp-former</span>
     </div>
-    <div class="health" id="health">
+    <div class="health">
       <span class="dot" id="health-dot"></span>
-      <span id="health-text">checking…</span>
+      <span id="health-text">checking</span>
     </div>
   </div>
 </header>
@@ -27,71 +27,73 @@
 <main class="container">
 
   <section class="hero">
-    <h2>Wrap any CLI behind a verification gate.</h2>
+    <div class="eyebrow">universal converter</div>
+    <h1 class="display">
+      Turn any GitHub repo<br>
+      into an <span class="accent">MCP server</span>.
+    </h1>
     <p class="lede">
-      Pick a target tool, get a downloadable adapter that gates
-      destructive operations against a domain ontology. Every block is
-      explainable — traces back to a specific grounded fact with
-      provenance.
+      Download. Map what it does as a graph. Rebuild as MCP. Every
+      destructive operation goes through a verification gate before it
+      reaches the underlying CLI — explainable, auditable, gated by an
+      ontology you can edit.
     </p>
   </section>
 
-  <section class="form-card">
+  <section class="card">
     <div class="tabs">
       <button class="tab active" data-tab="generate">Generate</button>
       <button class="tab" data-tab="registry">Registry</button>
     </div>
 
     <div class="tab-panel" id="tab-generate">
-      <h3>Wrap any tool</h3>
-      <p class="lede" style="font-size: 14px; margin-top: 0;">
-        Paste a built-in name (<code>git</code>, <code>kubectl</code>,
-        <code>gh</code>, <code>aws</code>, <code>psql</code>) <strong>or</strong>
-        any GitHub repo URL. Built-in names use the curated bundled
-        ontology. URLs trigger LLM ontology generation, validated
-        through <a href="https://github.com/fabio-rovai/open-ontologies">open-ontologies</a>.
-      </p>
+      <h3>1. Target</h3>
       <input type="text" id="target-input" class="text-input"
         placeholder="git, kubectl, or https://github.com/owner/repo"
         spellcheck="false"
         autocapitalize="off"
         autocomplete="off">
 
-      <p class="hint" id="target-detected" style="margin: -4px 0 16px;">
-        &nbsp;
-      </p>
+      <p class="detected" id="target-detected">&nbsp;</p>
 
-      <label class="opt">
-        <input type="radio" name="llm-backend" value="auto" checked>
-        <span><strong>Auto</strong> — use API if
-        <code>ANTHROPIC_API_KEY</code> is set, else the local
-        <code>claude</code> CLI</span>
-      </label>
-      <label class="opt">
-        <input type="radio" name="llm-backend" value="claude-cli">
-        <span><strong>Claude Code CLI</strong> — uses your existing
-        Claude Code session, no API key needed</span>
-      </label>
-      <label class="opt">
-        <input type="radio" name="llm-backend" value="api">
-        <span><strong>Anthropic API</strong> — requires
-        <code>ANTHROPIC_API_KEY</code> on the server</span>
-      </label>
+      <h3>2. LLM backend</h3>
+      <div class="opts">
+        <label class="opt">
+          <input type="radio" name="llm-backend" value="auto" checked>
+          <div>
+            <strong>Auto.</strong> API if <code>ANTHROPIC_API_KEY</code> is set,
+            else the local <code>claude</code> CLI.
+          </div>
+        </label>
+        <label class="opt">
+          <input type="radio" name="llm-backend" value="claude-cli">
+          <div>
+            <strong>Claude Code CLI.</strong> Uses your existing session.
+            No API key needed.
+          </div>
+        </label>
+        <label class="opt">
+          <input type="radio" name="llm-backend" value="api">
+          <div>
+            <strong>Anthropic API.</strong> Requires
+            <code>ANTHROPIC_API_KEY</code> on the server.
+          </div>
+        </label>
+      </div>
 
       <div class="actions">
         <button id="generate-btn" class="btn primary" disabled>
-          Generate MCP bundle →
+          Generate bundle <span class="caret">→</span>
         </button>
         <span class="hint" id="hint-gen">paste a target above</span>
       </div>
     </div>
 
     <div class="tab-panel hidden" id="tab-registry">
-      <h3>Wrapper registry</h3>
-      <p class="lede" style="font-size: 14px; margin-top: 0;">
-        Verified MCP wrappers shipped with mcp-former. Use
-        <code>mcpf install NAME</code> on the CLI to materialise a
-        bundle locally.
+      <h3>Registry</h3>
+      <p class="hint" style="margin-bottom: 20px;">
+        Verified wrappers shipped with mcp-former. Click a card to fill
+        the generate form. Use <code style="font-family: var(--mono); background: var(--surface-2); padding: 2px 6px; border-radius: 3px; color: var(--text);">mcpf install NAME</code> to materialise locally.
       </p>
       <div id="registry-list" class="registry-grid">
         <div class="preset-loading">loading…</div>
@@ -99,47 +101,69 @@
     </div>
   </section>
 
-  <section class="output-card hidden" id="output-card">
+  <section class="card output-card hidden" id="output-card">
     <div class="output-head">
-      <h3>Plan output</h3>
-      <span id="output-status" class="status running">running…</span>
+      <h3>Output</h3>
+      <span id="output-status" class="status">idle</span>
     </div>
     <pre id="output"></pre>
     <div class="output-actions hidden" id="output-actions">
-      <a id="download-link" class="btn primary" download>Download bundle (zip)</a>
-      <button class="btn ghost" id="rerun-btn">Run again</button>
+      <a id="download-link" class="btn primary" download>
+        Download bundle <span class="caret">↓</span>
+      </a>
+      <button class="btn" id="rerun-btn">Run again</button>
     </div>
   </section>
 
-  <section class="info">
-    <h3>How it works</h3>
-    <pre class="diagram">
-LLM
- │
- ▼  (MCP tool call)
-mcpf-&lt;adapter&gt;             adapter scripts in bin/
- │
- ├─► build a CLAIM about the operation's safety
- ├─► tardygrada daemon: cmd=run, claim=...
- │      └─► VERIFIED  → unsafe, REJECT
- │      └─► ontology_gap → safe, EXECUTE
- ▼
-underlying software        (only if gate passes)
-    </pre>
-    <p class="footnote">
-      mcp-former is the introspection / wrapper layer.
-      <a href="https://github.com/fabio-rovai/tardygrada">tardygrada</a>
-      is the verification engine. Two-layer model — clean separation.
-    </p>
+  <section style="margin-top: 96px;">
+    <div class="eyebrow" style="margin-bottom: 12px;">how it works</div>
+    <h1 class="display" style="font-size: 2.25rem; max-width: 18ch; margin-bottom: 32px;">
+      Three steps. No surprises.
+    </h1>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01 — Download</div>
+        <h4>Clone the repo.</h4>
+        <p>
+          Shallow clone over HTTPS. Detect the binary from
+          Cargo.toml, pyproject, package.json, or go.mod. No build
+          required.
+        </p>
+      </div>
+      <div class="step">
+        <div class="step-num">02 — Map</div>
+        <h4>Extract the surface as a graph.</h4>
+        <p>
+          Parse cobra <code style="font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 3px; color: var(--text);">Use:</code>
+          / clap / click / mitchellh-cli definitions. LLM emits an
+          OWL ontology — destructive operations, protected resources,
+          target classes. OWL-RL closes the hierarchy.
+        </p>
+      </div>
+      <div class="step">
+        <div class="step-num">03 — Rebuild</div>
+        <h4>Ship as MCP.</h4>
+        <p>
+          Bundle: generic ontology-driven adapter, MCP server (JSON-RPC
+          over stdio), Anthropic skill, README, AUDIT report. Drop into
+          <code style="font-family: var(--mono); background: var(--surface-2); padding: 1px 5px; border-radius: 3px; color: var(--text);">~/.claude/mcp.json</code> and
+          your LLM calls the gated tool directly.
+        </p>
+      </div>
+    </div>
   </section>
 
 </main>
 
 <footer>
   <div class="container">
-    <span>mcp-former v0.4 · private prototype</span>
+    <span class="brand-mark" style="font-size: 14px; color: var(--accent);">▰</span>
+    <span>mcp-former v0.14</span>
     <span class="sep">·</span>
-    <a href="https://github.com/fabio-rovai/mcp-former">repo</a>
+    <span>private prototype</span>
+    <span class="sep">·</span>
+    <a href="https://github.com/fabio-rovai/mcp-former" style="color: var(--text-2); border-color: var(--border);">repo</a>
   </div>
 </footer>
 
