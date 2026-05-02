@@ -1,0 +1,86 @@
+# mcp-former AWS CLI A-Box.
+
+@prefix :     <http://tardygrada.org/mcpf/> .
+@prefix aws:  <http://tardygrada.org/mcpf/aws/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+
+# Protected tag values — anything tagged Environment={production,prod,live,critical}
+# is shielded by default
+
+<http://tardygrada.org/production>   a :ProtectedTag ;
+    rdfs:label "production" .
+<http://tardygrada.org/prod>         a :ProtectedTag ;
+    rdfs:label "prod" .
+<http://tardygrada.org/live>         a :ProtectedTag ;
+    rdfs:label "live" .
+<http://tardygrada.org/critical>     a :ProtectedTag ;
+    rdfs:label "critical" .
+
+
+# Protected services — entire service surface blocked from mutation
+
+<http://tardygrada.org/route53>        a :ProtectedService ;
+    rdfs:label "route53" ;
+    :rationale "DNS — wrong delete will down everything." .
+
+<http://tardygrada.org/organizations>  a :ProtectedService ;
+    rdfs:label "organizations" .
+
+
+# Destructive operations
+
+<http://tardygrada.org/terminate_instances>  a :AwsDestructiveOp ;
+    rdfs:label "ec2 terminate-instances" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_db_instance>   a :AwsDestructiveOp ;
+    rdfs:label "rds delete-db-instance" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_db_cluster>    a :AwsDestructiveOp ;
+    rdfs:label "rds delete-db-cluster" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_bucket>        a :AwsDestructiveOp ;
+    rdfs:label "s3api delete-bucket" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_function>      a :AwsDestructiveOp ;
+    rdfs:label "lambda delete-function" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_stack>         a :AwsDestructiveOp ;
+    rdfs:label "cloudformation delete-stack" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_user>          a :AwsDestructiveOp ;
+    rdfs:label "iam delete-user" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_role>          a :AwsDestructiveOp ;
+    rdfs:label "iam delete-role" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_policy>        a :AwsDestructiveOp ;
+    rdfs:label "iam delete-policy" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_table>         a :AwsDestructiveOp ;
+    rdfs:label "dynamodb delete-table" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_cluster>       a :AwsDestructiveOp ;
+    rdfs:label "ecs/eks delete-cluster" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_repository>    a :AwsDestructiveOp ;
+    rdfs:label "ecr delete-repository" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_log_group>     a :AwsDestructiveOp ;
+    rdfs:label "logs delete-log-group" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_secret>        a :AwsDestructiveOp ;
+    rdfs:label "secretsmanager delete-secret" ;
+    :tool :AwsTool .
+<http://tardygrada.org/delete_key>           a :AwsDestructiveOp ;
+    rdfs:label "kms delete-key" ;
+    :tool :AwsTool .
+
+# s3 DSL special-cases (high-level commands, not s3api)
+<http://tardygrada.org/s3_rm_recursive>      a :AwsDestructiveOp ;
+    rdfs:label "aws s3 rm --recursive" ;
+    :tool :AwsTool .
+<http://tardygrada.org/s3_rb_force>          a :AwsDestructiveOp ;
+    rdfs:label "aws s3 rb --force" ;
+    :tool :AwsTool .

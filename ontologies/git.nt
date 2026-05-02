@@ -1,26 +1,42 @@
-# tardygrada git domain ontology — bundled tier.
-# Loaded by the daemon on startup so the tardy-git adapter can ground
-# safety checks against it without bootstrapping.
-#
-# Conventions:
-#   - protected_branch: refs that the adapter MUST refuse to delete or
-#     force-push without an explicit override
-#   - protected_ref:    refs that should never be moved imperatively
-#   - destructive_op:   git operations the adapter routes through
-#     verification regardless of arguments
+# Materialised by mcpf-materialize
+# Source: schema.ttl
+# Source: git.ttl
+# Reasoning: rdflib + owlrl OWL-RL profile
+# Stats: 99 schema + 30 A-Box → 480 after reasoning (+351 inferred)
+# Output: 34 flat `is_a` triples (subclass closure included)
+# DO NOT EDIT — regenerate with `mcpf materialize git`.
 
-# Protected branches (default repo conventions)
-<http://tardygrada.org/main> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
-<http://tardygrada.org/master> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
-<http://tardygrada.org/develop> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
-<http://tardygrada.org/release> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
-
-# Protected refs
+<http://tardygrada.org/AwsTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/GhTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/GitTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
 <http://tardygrada.org/HEAD> <http://schema.org/is_a> <http://tardygrada.org/protected_ref> .
-
-# Destructive operations
+<http://tardygrada.org/HEAD> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/KubectlTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/PsqlTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
 <http://tardygrada.org/branch_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/push_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/reset_hard> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/clean_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/branch_delete> <http://schema.org/is_a> <http://tardygrada.org/git_destructive_op> .
+<http://tardygrada.org/branch_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
 <http://tardygrada.org/checkout_discard> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/checkout_discard> <http://schema.org/is_a> <http://tardygrada.org/git_destructive_op> .
+<http://tardygrada.org/checkout_discard> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/clean_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/clean_force> <http://schema.org/is_a> <http://tardygrada.org/git_destructive_op> .
+<http://tardygrada.org/clean_force> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/develop> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
+<http://tardygrada.org/develop> <http://schema.org/is_a> <http://tardygrada.org/protected_ref> .
+<http://tardygrada.org/develop> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/main> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
+<http://tardygrada.org/main> <http://schema.org/is_a> <http://tardygrada.org/protected_ref> .
+<http://tardygrada.org/main> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/master> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
+<http://tardygrada.org/master> <http://schema.org/is_a> <http://tardygrada.org/protected_ref> .
+<http://tardygrada.org/master> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/push_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/push_force> <http://schema.org/is_a> <http://tardygrada.org/git_destructive_op> .
+<http://tardygrada.org/push_force> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/release> <http://schema.org/is_a> <http://tardygrada.org/protected_branch> .
+<http://tardygrada.org/release> <http://schema.org/is_a> <http://tardygrada.org/protected_ref> .
+<http://tardygrada.org/release> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/reset_hard> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/reset_hard> <http://schema.org/is_a> <http://tardygrada.org/git_destructive_op> .
+<http://tardygrada.org/reset_hard> <http://schema.org/is_a> <http://tardygrada.org/operation> .

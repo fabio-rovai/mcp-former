@@ -1,0 +1,170 @@
+# mcp-former core ontology — shared T-Box.
+#
+# This is the schema layer shared by every wrapper's per-tool A-Box
+# (git.ttl, kubectl.ttl, gh.ttl, aws.ttl, psql.ttl, ...). It defines:
+#
+#   - the class hierarchy under :ProtectedThing and :Operation
+#   - the properties used to relate them (:operatesOn, :tool, :requires)
+#   - a :gates property recording which adapter enforces a given fact
+#
+# After OWL-RL reasoning over (schema + per-tool A-Box), an instance
+# like :git/main inherits the full chain
+#     :ProtectedBranch ⊑ :ProtectedRef ⊑ :ProtectedThing
+# so the verification gate can check any level of the hierarchy and
+# get the same answer.
+#
+# The materialised closure is also exported as flat N-Triples (one
+# `is_a` triple per (instance, class) pair, including inferred ones)
+# so tardygrada's existing flat-fact lookup keeps working.
+
+@prefix :     <http://tardygrada.org/mcpf/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+
+<http://tardygrada.org/mcpf/> a owl:Ontology ;
+    dct:title "mcp-former core ontology" ;
+    dct:description """Schema for the protection model used by every mcp-former wrapper: classes for protected things and destructive operations, properties relating them.""" ;
+    owl:versionInfo "0.1.0" .
+
+
+# ============================================================================
+# Top-level classes
+# ============================================================================
+
+:ProtectedThing a owl:Class ;
+    rdfs:label "Protected Thing" ;
+    rdfs:comment """Anything in a target system whose mutation should trigger a verification gate. Subclassed by every domain (git branches, kubernetes namespaces, AWS services, ...).""" .
+
+:Operation a owl:Class ;
+    rdfs:label "Operation" ;
+    rdfs:comment """An action invoked through a wrapped tool's CLI/API surface. Read-only operations are typically not modelled.""" .
+
+:DestructiveOp a owl:Class ;
+    rdfs:subClassOf :Operation ;
+    rdfs:label "Destructive Operation" ;
+    rdfs:comment """An operation that destroys data irreversibly (delete, drop, force-push, terminate, etc.). Triggers a rejection at the gate unless overridden.""" .
+
+:Tool a owl:Class ;
+    rdfs:label "Wrapped Tool" ;
+    rdfs:comment """A piece of legacy software with an mcp-former adapter (git, kubectl, gh, aws, psql, ...).""" .
+
+
+# ============================================================================
+# Protected hierarchy — every class subclasses :ProtectedThing
+# ============================================================================
+
+:ProtectedRef a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Ref" ;
+    rdfs:comment """A reference (branch, tag, HEAD) that should not be moved imperatively.""" .
+
+:ProtectedBranch a owl:Class ;
+    rdfs:subClassOf :ProtectedRef ;
+    rdfs:label "Protected Branch" ;
+    rdfs:comment """A branch (typically main, master, develop, release) that should not be deleted or force-pushed.""" .
+
+:ProtectedNamespace a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Namespace" ;
+    rdfs:comment """A logical scope (kubernetes namespace, postgres schema, AWS region) blocked from mutation as a unit.""" .
+
+:ProtectedResource a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Resource" ;
+    rdfs:comment """A specific named resource (coredns deployment, kube-proxy, root volume) that should never be deleted.""" .
+
+:ProtectedDatabase a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Database" .
+
+:ProtectedSchema a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Schema" .
+
+:ProtectedRole a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Role" ;
+    rdfs:comment """A privileged identity (postgres superuser, AWS root account) whose membership should not change.""" .
+
+:ProtectedRepo a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Repo" .
+
+:ProtectedService a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Service" ;
+    rdfs:comment """An entire service (route53, organizations) where any mutation needs review.""" .
+
+:ProtectedTag a owl:Class ;
+    rdfs:subClassOf :ProtectedThing ;
+    rdfs:label "Protected Tag" ;
+    rdfs:comment """A tag value (Environment=production, prod, live) that protects whatever it's attached to.""" .
+
+
+# ============================================================================
+# Per-tool DestructiveOp subclasses — narrow enough that
+# adapters can query at the right granularity
+# ============================================================================
+
+:GitDestructiveOp a owl:Class ;
+    rdfs:subClassOf :DestructiveOp ;
+    rdfs:label "Git Destructive Operation" .
+
+:KubectlDestructiveOp a owl:Class ;
+    rdfs:subClassOf :DestructiveOp ;
+    rdfs:label "Kubectl Destructive Operation" .
+
+:GhDestructiveOp a owl:Class ;
+    rdfs:subClassOf :DestructiveOp ;
+    rdfs:label "Gh Destructive Operation" .
+
+:AwsDestructiveOp a owl:Class ;
+    rdfs:subClassOf :DestructiveOp ;
+    rdfs:label "AWS Destructive Operation" .
+
+:PsqlDestructiveOp a owl:Class ;
+    rdfs:subClassOf :DestructiveOp ;
+    rdfs:label "PostgreSQL Destructive Operation" .
+
+
+# ============================================================================
+# Tool individuals
+# ============================================================================
+
+:GitTool     a :Tool ; rdfs:label "git" .
+:KubectlTool a :Tool ; rdfs:label "kubectl" .
+:GhTool      a :Tool ; rdfs:label "gh" .
+:AwsTool     a :Tool ; rdfs:label "aws" .
+:PsqlTool    a :Tool ; rdfs:label "psql" .
+
+
+# ============================================================================
+# Properties
+# ============================================================================
+
+:tool a owl:ObjectProperty ;
+    rdfs:label "wrapped tool" ;
+    rdfs:domain :Operation ;
+    rdfs:range :Tool ;
+    rdfs:comment "Which tool dispatches this operation." .
+
+:operatesOn a owl:ObjectProperty ;
+    rdfs:label "operates on" ;
+    rdfs:domain :Operation ;
+    rdfs:range :ProtectedThing ;
+    rdfs:comment """An operation that mutates the named thing. Combined with rdfs:domain :DestructiveOp, the reasoner can flag any (op, thing) pair as gated.""" .
+
+:gatedBy a owl:ObjectProperty ;
+    rdfs:label "gated by" ;
+    rdfs:domain :Operation ;
+    rdfs:range :Tool ;
+    rdfs:comment """The mcpf-* adapter that enforces this rule. Same as :tool but emphasises the gating relationship.""" .
+
+:rationale a owl:DatatypeProperty ;
+    rdfs:label "rationale" ;
+    rdfs:domain :ProtectedThing ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Human-readable why-this-is-protected note." .

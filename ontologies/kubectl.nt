@@ -1,40 +1,60 @@
-# mcp-former kubectl domain ontology — bundled tier.
-# Loaded by tardygrada via mcpf apply or via tardygrada's startup
-# scan. Drives the mcpf-kubectl wrapper's protection decisions.
-#
-# Conventions:
-#   protected_namespace  — namespaces that hold cluster-critical state
-#                          (kube-system etc.); blanket reject mutations
-#   protected_resource   — specific named resources (coredns, kube-proxy,
-#                          metrics-server) that should never be deleted
-#                          even outside protected namespaces
-#   destructive_op       — operations that destroy data irreversibly
+# Materialised by mcpf-materialize
+# Source: schema.ttl
+# Source: kubectl.ttl
+# Reasoning: rdflib + owlrl OWL-RL profile
+# Stats: 99 schema + 50 A-Box → 532 after reasoning (+383 inferred)
+# Output: 52 flat `is_a` triples (subclass closure included)
+# DO NOT EDIT — regenerate with `mcpf materialize kubectl`.
 
-# Protected namespaces — anything mutating in these requires
-# --allow-unsafe.  "default" is intentionally NOT protected; it's
-# the playground namespace.
-<http://tardygrada.org/kube_system> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
-<http://tardygrada.org/kube_public> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
-<http://tardygrada.org/kube_node_lease> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
-<http://tardygrada.org/cert_manager> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
-<http://tardygrada.org/ingress_nginx> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
-
-# Protected named resources — never delete by name, even in default ns
-<http://tardygrada.org/coredns> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
-<http://tardygrada.org/kube_proxy> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
-<http://tardygrada.org/kube_dns> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
-<http://tardygrada.org/metrics_server> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
-<http://tardygrada.org/kubernetes> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
-
-# Destructive operations — flag-level granularity
-<http://tardygrada.org/delete_all> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/delete_namespace> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/AwsTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/GhTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/GitTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/KubectlTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/PsqlTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
 <http://tardygrada.org/apply_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/replace_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/drain> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/apply_force> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/apply_force> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/cert_manager> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
+<http://tardygrada.org/cert_manager> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
 <http://tardygrada.org/cordon> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-
-# Cluster-scoped destructive
-<http://tardygrada.org/delete_node> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/delete_pv> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/cordon> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/cordon> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/coredns> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
+<http://tardygrada.org/coredns> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/delete_all> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_all> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/delete_all> <http://schema.org/is_a> <http://tardygrada.org/operation> .
 <http://tardygrada.org/delete_crd> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_crd> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/delete_crd> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/delete_namespace> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_namespace> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/delete_namespace> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/delete_node> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_node> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/delete_node> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/delete_pv> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/delete_pv> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/delete_pv> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/drain> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/drain> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/drain> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/ingress_nginx> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
+<http://tardygrada.org/ingress_nginx> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/kube_dns> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
+<http://tardygrada.org/kube_dns> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/kube_node_lease> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
+<http://tardygrada.org/kube_node_lease> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/kube_proxy> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
+<http://tardygrada.org/kube_proxy> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/kube_public> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
+<http://tardygrada.org/kube_public> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/kube_system> <http://schema.org/is_a> <http://tardygrada.org/protected_namespace> .
+<http://tardygrada.org/kube_system> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/kubernetes> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
+<http://tardygrada.org/kubernetes> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/metrics_server> <http://schema.org/is_a> <http://tardygrada.org/protected_resource> .
+<http://tardygrada.org/metrics_server> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/replace_force> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/replace_force> <http://schema.org/is_a> <http://tardygrada.org/kubectl_destructive_op> .
+<http://tardygrada.org/replace_force> <http://schema.org/is_a> <http://tardygrada.org/operation> .

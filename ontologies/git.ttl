@@ -1,0 +1,61 @@
+# mcp-former git A-Box.
+#
+# Instances of the schema's classes for git's protection model. After
+# OWL-RL reasoning over (schema.ttl + this file), every instance also
+# inherits the parent classes — so e.g. :main rdf:type :ProtectedBranch
+# AND :ProtectedRef AND :ProtectedThing.
+
+@prefix :     <http://tardygrada.org/mcpf/> .
+@prefix git:  <http://tardygrada.org/mcpf/git/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+
+# ----------------------------------------------------------------------
+# Protected refs / branches
+# ----------------------------------------------------------------------
+
+git:main    a :ProtectedBranch ;
+            rdfs:label "main" ;
+            :rationale "Default branch in modern repos; production state." .
+
+git:master  a :ProtectedBranch ;
+            rdfs:label "master" ;
+            :rationale "Legacy default branch; often production." .
+
+git:develop a :ProtectedBranch ;
+            rdfs:label "develop" ;
+            :rationale "Standard integration branch in git-flow." .
+
+git:release a :ProtectedBranch ;
+            rdfs:label "release" ;
+            :rationale "Release candidate branch." .
+
+git:HEAD    a :ProtectedRef ;
+            rdfs:label "HEAD" ;
+            :rationale "Current ref; must not be moved imperatively." .
+
+
+# ----------------------------------------------------------------------
+# Destructive operations — gated by mcpf-git
+# ----------------------------------------------------------------------
+
+git:branch_delete    a :GitDestructiveOp ;
+                     rdfs:label "git branch -d/-D" ;
+                     :tool :GitTool .
+
+git:push_force       a :GitDestructiveOp ;
+                     rdfs:label "git push --force" ;
+                     :tool :GitTool .
+
+git:reset_hard       a :GitDestructiveOp ;
+                     rdfs:label "git reset --hard" ;
+                     :tool :GitTool .
+
+git:clean_force      a :GitDestructiveOp ;
+                     rdfs:label "git clean -f" ;
+                     :tool :GitTool .
+
+git:checkout_discard a :GitDestructiveOp ;
+                     rdfs:label "git checkout -- PATH" ;
+                     :tool :GitTool .

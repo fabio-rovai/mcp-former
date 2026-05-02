@@ -1,0 +1,53 @@
+# mcp-former gh (GitHub CLI) A-Box.
+
+@prefix :     <http://tardygrada.org/mcpf/> .
+@prefix gh:   <http://tardygrada.org/mcpf/gh/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+
+# Protected repos / orgs (extend per deployment)
+
+<http://tardygrada.org/main_app>     a :ProtectedRepo ;
+    rdfs:label "main-app" .
+<http://tardygrada.org/production>   a :ProtectedRepo ;
+    rdfs:label "production" .
+
+
+# Destructive gh operations — by noun_verb
+
+<http://tardygrada.org/repo_delete>       a :GhDestructiveOp ;
+    rdfs:label "gh repo delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/release_delete>    a :GhDestructiveOp ;
+    rdfs:label "gh release delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/issue_delete>      a :GhDestructiveOp ;
+    rdfs:label "gh issue delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/secret_delete>     a :GhDestructiveOp ;
+    rdfs:label "gh secret delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/ssh_key_delete>    a :GhDestructiveOp ;
+    rdfs:label "gh ssh-key delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/gpg_key_delete>    a :GhDestructiveOp ;
+    rdfs:label "gh gpg-key delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/variable_delete>   a :GhDestructiveOp ;
+    rdfs:label "gh variable delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/cache_delete>      a :GhDestructiveOp ;
+    rdfs:label "gh cache delete" ;
+    :tool :GhTool .
+
+<http://tardygrada.org/codespace_delete>  a :GhDestructiveOp ;
+    rdfs:label "gh codespace delete" ;
+    :tool :GhTool .

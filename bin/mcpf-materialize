@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""
+mcpf materialize — load an OWL T-Box + per-tool A-Box, run OWL-RL
+reasoning, and export the materialised closure as flat N-Triples for
+tardygrada.
+
+Pipeline:
+
+    schema.ttl + <tool>.ttl
+            │
+            ▼
+        rdflib + owlrl (OWL-RL semantics, same as
+                         open-ontologies' onto_reason)
+            │  (subclass closure, property chains, …)
+            ▼
+        full materialised graph
+            │
+            ▼
+    extract every (instance, rdf:type, class) pair, snake-case
+    the class name, emit as flat `<s> is_a <o>` triples so
+    tardygrada's existing fact-lookup adapters work without changes
+            │
+            ▼
+        ontologies/<tool>.nt   (committed; loaded by tardygrada)
+
+The materialised .nt also contains derived rdf:type facts. If the
+T-Box says ProtectedBranch ⊑ ProtectedRef ⊑ ProtectedThing, then a
+single A-Box declaration `git:main a :ProtectedBranch` materialises
+into all three is_a triples. The adapter can query at any level of
+the hierarchy.
+
+Open-ontologies (the Rust binary) stays as the *validator* — we run
+`open-ontologies validate` on each .ttl before reasoning, so syntax
+errors in the source are caught with the project-grade RDF parser.
+
+Use:
+    mcpf materialize git              # writes ontologies/git.nt
+    mcpf materialize all              # all wrappers
+    mcpf materialize git --no-write   # dry-run
+    mcpf materialize git --skip-validate
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+ONTOLOGIES = ROOT / "ontologies"
+SCHEMA_TTL = ONTOLOGIES / "schema.ttl"
+
+OPEN_ONTOLOGIES_BIN = os.environ.get(
+    "OPEN_ONTOLOGIES_BIN",
+    str(ROOT.parent / "open-ontologies" / "target" / "release"
+        / "open-ontologies"))
+
+GREEN  = "\033[0;32m"
+YELLOW = "\033[1;33m"
+RED    = "\033[0;31m"
+DIM    = "\033[2m"
+CYAN   = "\033[0;36m"
+NC     = "\033[0m"
+
+KNOWN_TOOLS = ("git", "kubectl", "gh", "aws", "psql")
+
+# Classes to exclude when emitting flat is_a triples — these are
+# OWL/RDFS metadata, not application instances.
+EXCLUDED_TYPES = {
+    "http://www.w3.org/2002/07/owl#NamedIndividual",
+    "http://www.w3.org/2002/07/owl#Class",
+    "http://www.w3.org/2002/07/owl#Thing",
+    "http://www.w3.org/2002/07/owl#ObjectProperty",
+    "http://www.w3.org/2002/07/owl#DatatypeProperty",
+    "http://www.w3.org/2002/07/owl#Ontology",
+    "http://www.w3.org/2000/01/rdf-schema#Class",
+    "http://www.w3.org/2000/01/rdf-schema#Resource",
+    "http://www.w3.org/2000/01/rdf-schema#Datatype",
+}
+
+
+def validate_ttl(path):
+    """Run `open-ontologies validate` if the binary is on disk;
+    otherwise rely on rdflib's own parse-time validation downstream."""
+    if not Path(OPEN_ONTOLOGIES_BIN).exists():
+        return True, "(open-ontologies binary missing; rdflib will validate)"
+    r = subprocess.run(
+        [OPEN_ONTOLOGIES_BIN, "validate", str(path)],
+        capture_output=True, text=True)
+    if r.returncode != 0:
+        return False, (r.stderr or r.stdout).strip()
+    return True, r.stdout.strip()
+
+
+def reason_and_extract(tool):
+    """Load schema + A-Box, run OWL-RL reasoning, return list of
+    (instance_local, class_local) pairs."""
+    try:
+        from rdflib import Graph, RDF, OWL, RDFS
+        import owlrl
+    except ImportError as e:
+        raise RuntimeError(
+            f"missing dependency: {e}\n"
+            f"Install: pip install rdflib owlrl") from e
+
+    abox = ONTOLOGIES / f"{tool}.ttl"
+    if not abox.exists():
+        raise RuntimeError(f"A-Box file not found: {abox}")
+
+    g = Graph()
+    g.parse(SCHEMA_TTL, format="turtle")
+    pre = len(g)
+    g.parse(abox, format="turtle")
+    after_load = len(g)
+
+    owlrl.DeductiveClosure(owlrl.OWLRL_Semantics).expand(g)
+    after_reason = len(g)
+
+    # Collect every (instance, type) pair where:
+    #   instance is in tardygrada.org namespace
+    #   type is in tardygrada.org/mcpf/ namespace (our schema)
+    pairs = set()
+    for s, p, o in g.triples((None, RDF.type, None)):
+        s_iri = str(s)
+        o_iri = str(o)
+        if not s_iri.startswith("http://tardygrada.org/"):
+            continue
+        if not o_iri.startswith("http://tardygrada.org/mcpf/"):
+            continue
+        if o_iri in EXCLUDED_TYPES:
+            continue
+        pairs.add((s_iri, o_iri))
+
+    return pairs, {
+        "schema_triples": pre,
+        "after_load": after_load,
+        "after_reason": after_reason,
+        "inferred": after_reason - after_load,
+    }
+
+
+def to_local(iri):
+    """http://tardygrada.org/mcpf/git/main → main
+       http://tardygrada.org/mcpf/ProtectedBranch → ProtectedBranch"""
+    return re.sub(r".*[/#]", "", iri)
+
+
+def camel_to_snake(name):
+    """ProtectedBranch → protected_branch"""
+    return re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower()
+
+
+def write_flat_nt(pairs, out_path, source_files, stats):
+    """Emit each (instance, class) pair as a flat is_a triple. Use
+    snake_case class names so existing adapters' claims still match."""
+    triples = []
+    for s_iri, c_iri in pairs:
+        s_local = to_local(s_iri)
+        c_local = to_local(c_iri)
+        c_snake = camel_to_snake(c_local)
+        triples.append((s_local, "is_a", c_snake))
+    triples = sorted(set(triples))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write(f"# Materialised by mcpf-materialize\n")
+        for src in source_files:
+            f.write(f"# Source: {src}\n")
+        f.write(f"# Reasoning: rdflib + owlrl OWL-RL profile\n")
+        f.write(f"# Stats: {stats['schema_triples']} schema + "
+                f"{stats['after_load'] - stats['schema_triples']} "
+                f"A-Box → {stats['after_reason']} after reasoning "
+                f"(+{stats['inferred']} inferred)\n")
+        f.write(f"# Output: {len(triples)} flat `is_a` triples (subclass "
+                f"closure included)\n")
+        f.write(f"# DO NOT EDIT — regenerate with `mcpf materialize "
+                f"{out_path.stem}`.\n\n")
+        for (s, p, o) in triples:
+            f.write(f"<http://tardygrada.org/{s}> "
+                    f"<http://schema.org/{p}> "
+                    f"<http://tardygrada.org/{o}> .\n")
+    return len(triples)
+
+
+def materialize_one(tool, no_write=False, skip_validate=False):
+    abox = ONTOLOGIES / f"{tool}.ttl"
+    if not abox.exists():
+        print(f"  {YELLOW}skip {tool}: no {tool}.ttl A-Box{NC}")
+        return None
+
+    if not skip_validate:
+        for path in (SCHEMA_TTL, abox):
+            ok, msg = validate_ttl(path)
+            if not ok:
+                print(f"  {RED}validate failed: {path.name}: "
+                      f"{msg[:200]}{NC}", file=sys.stderr)
+                return None
+        print(f"  {DIM}validated schema.ttl + {abox.name} via "
+              f"open-ontologies{NC}")
+
+    pairs, stats = reason_and_extract(tool)
+    print(f"  {DIM}{stats['schema_triples']} schema + "
+          f"{stats['after_load'] - stats['schema_triples']} A-Box "
+          f"= {stats['after_load']} loaded → "
+          f"{stats['after_reason']} after OWL-RL "
+          f"(+{stats['inferred']} inferred){NC}")
+
+    out_nt = ONTOLOGIES / f"{tool}.nt"
+    if no_write:
+        n = len(pairs)
+        print(f"  {GREEN}would write {n} flat triples to "
+              f"{out_nt.name} (dry-run){NC}")
+    else:
+        n = write_flat_nt(pairs, out_nt,
+            [SCHEMA_TTL.name, abox.name], stats)
+        print(f"  {GREEN}✓ wrote {n} flat triples to {out_nt.name}{NC}")
+    return n
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("tool",
+        help=f"tool to materialise (one of {', '.join(KNOWN_TOOLS)}, "
+             f"or 'all')")
+    ap.add_argument("--no-write", action="store_true",
+        help="don't write the .nt file, just print stats")
+    ap.add_argument("--skip-validate", action="store_true",
+        help="skip the open-ontologies validate step")
+    args = ap.parse_args()
+
+    tools = list(KNOWN_TOOLS) if args.tool == "all" else [args.tool]
+    failed = False
+    for t in tools:
+        if t not in KNOWN_TOOLS:
+            print(f"{RED}unknown tool {t}{NC}", file=sys.stderr)
+            return 2
+        print(f"{DIM}── {t} ──{NC}")
+        try:
+            r = materialize_one(t, args.no_write, args.skip_validate)
+            if r is None:
+                continue
+        except RuntimeError as e:
+            print(f"  {RED}{e}{NC}", file=sys.stderr)
+            failed = True
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

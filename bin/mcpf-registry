@@ -126,6 +126,25 @@ def cmd_show(args):
     return 2
 
 
+def maybe_materialize(name):
+    """If <name>.ttl is newer than <name>.nt, run mcpf-materialize to
+    bring the flat fact list back in sync with the OWL source.
+    Quietly no-ops if there's no .ttl (legacy wrappers without an
+    OWL source) or the materialiser is missing."""
+    ttl = ROOT / "ontologies" / f"{name}.ttl"
+    nt = ROOT / "ontologies" / f"{name}.nt"
+    if not ttl.exists():
+        return  # legacy wrapper, no OWL source
+    if nt.exists() and nt.stat().st_mtime >= ttl.stat().st_mtime:
+        return  # .nt is up to date
+    materialize_bin = ROOT / "bin" / "mcpf-materialize"
+    if not materialize_bin.exists():
+        return
+    import subprocess
+    print(f"{DIM}re-materialising {name}.ttl → {name}.nt…{NC}")
+    subprocess.run([str(materialize_bin), name], check=False)
+
+
 def cmd_install(args):
     idx = load_index()
     entry = next((w for w in idx["wrappers"] if w["name"] == args.name), None)
@@ -134,6 +153,10 @@ def cmd_install(args):
         print(f"  available: {', '.join(w['name'] for w in idx['wrappers'])}",
               file=sys.stderr)
         return 2
+
+    # Re-materialise if the OWL source has been edited since the last
+    # flat .nt was written.
+    maybe_materialize(entry["name"])
 
     adapter_src = ROOT / entry["adapter_path"]
     ontology_src = ROOT / entry["ontology_path"]

@@ -1,0 +1,67 @@
+# mcp-former PostgreSQL CLI A-Box.
+
+@prefix :     <http://tardygrada.org/mcpf/> .
+@prefix pg:   <http://tardygrada.org/mcpf/psql/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+
+# Protected databases
+
+<http://tardygrada.org/postgres>       a :ProtectedDatabase ;
+    rdfs:label "postgres" ;
+    :rationale "Default cluster database." .
+<http://tardygrada.org/template0>      a :ProtectedDatabase ;
+    rdfs:label "template0" .
+<http://tardygrada.org/template1>      a :ProtectedDatabase ;
+    rdfs:label "template1" .
+<http://tardygrada.org/production>     a :ProtectedDatabase ;
+    rdfs:label "production" .
+
+# Protected schemas
+
+<http://tardygrada.org/pg_catalog>          a :ProtectedSchema ;
+    rdfs:label "pg_catalog" .
+<http://tardygrada.org/information_schema>  a :ProtectedSchema ;
+    rdfs:label "information_schema" .
+
+# Protected roles (the same `postgres` IRI gets ProtectedDatabase
+# above; OWL handles overlap fine — multiple types).
+
+<http://tardygrada.org/postgres>        a :ProtectedRole .
+<http://tardygrada.org/rds_superuser>   a :ProtectedRole ;
+    rdfs:label "rds_superuser" .
+
+
+# Destructive SQL statement classes
+
+<http://tardygrada.org/drop_database>    a :PsqlDestructiveOp ;
+    rdfs:label "DROP DATABASE" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/drop_schema>      a :PsqlDestructiveOp ;
+    rdfs:label "DROP SCHEMA" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/drop_table>       a :PsqlDestructiveOp ;
+    rdfs:label "DROP TABLE" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/drop_role>        a :PsqlDestructiveOp ;
+    rdfs:label "DROP ROLE" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/drop_user>        a :PsqlDestructiveOp ;
+    rdfs:label "DROP USER" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/drop_extension>   a :PsqlDestructiveOp ;
+    rdfs:label "DROP EXTENSION" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/truncate>         a :PsqlDestructiveOp ;
+    rdfs:label "TRUNCATE" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/delete_no_where>  a :PsqlDestructiveOp ;
+    rdfs:label "DELETE without WHERE" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/update_no_where>  a :PsqlDestructiveOp ;
+    rdfs:label "UPDATE without WHERE" ;
+    :tool :PsqlTool .
+<http://tardygrada.org/grant_superuser>  a :PsqlDestructiveOp ;
+    rdfs:label "GRANT SUPERUSER" ;
+    :tool :PsqlTool .

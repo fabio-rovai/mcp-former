@@ -1,0 +1,90 @@
+# mcp-former kubectl A-Box.
+
+@prefix :     <http://tardygrada.org/mcpf/> .
+@prefix k8s:  <http://tardygrada.org/mcpf/kubectl/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+
+# ----------------------------------------------------------------------
+# Protected namespaces
+# ----------------------------------------------------------------------
+
+<http://tardygrada.org/kube_system>      a :ProtectedNamespace ;
+    rdfs:label "kube-system" ;
+    :rationale "Cluster-critical control-plane namespace." .
+
+<http://tardygrada.org/kube_public>      a :ProtectedNamespace ;
+    rdfs:label "kube-public" .
+
+<http://tardygrada.org/kube_node_lease>  a :ProtectedNamespace ;
+    rdfs:label "kube-node-lease" .
+
+<http://tardygrada.org/cert_manager>     a :ProtectedNamespace ;
+    rdfs:label "cert-manager" .
+
+<http://tardygrada.org/ingress_nginx>    a :ProtectedNamespace ;
+    rdfs:label "ingress-nginx" .
+
+
+# ----------------------------------------------------------------------
+# Protected resources (named, even outside protected namespaces)
+# ----------------------------------------------------------------------
+
+<http://tardygrada.org/coredns>         a :ProtectedResource ;
+    rdfs:label "coredns" ;
+    :rationale "Cluster DNS — deletion breaks all in-cluster name resolution." .
+
+<http://tardygrada.org/kube_proxy>      a :ProtectedResource ;
+    rdfs:label "kube-proxy" .
+
+<http://tardygrada.org/kube_dns>        a :ProtectedResource ;
+    rdfs:label "kube-dns" .
+
+<http://tardygrada.org/metrics_server>  a :ProtectedResource ;
+    rdfs:label "metrics-server" .
+
+<http://tardygrada.org/kubernetes>      a :ProtectedResource ;
+    rdfs:label "kubernetes" ;
+    :rationale "The default service in the default namespace; deletion breaks the cluster." .
+
+
+# ----------------------------------------------------------------------
+# Destructive operations
+# ----------------------------------------------------------------------
+
+<http://tardygrada.org/delete_all>          a :KubectlDestructiveOp ;
+    rdfs:label "kubectl delete --all" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/delete_namespace>    a :KubectlDestructiveOp ;
+    rdfs:label "kubectl delete namespace" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/apply_force>         a :KubectlDestructiveOp ;
+    rdfs:label "kubectl apply --force" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/replace_force>       a :KubectlDestructiveOp ;
+    rdfs:label "kubectl replace --force" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/drain>               a :KubectlDestructiveOp ;
+    rdfs:label "kubectl drain" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/cordon>              a :KubectlDestructiveOp ;
+    rdfs:label "kubectl cordon" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/delete_node>         a :KubectlDestructiveOp ;
+    rdfs:label "kubectl delete node" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/delete_pv>           a :KubectlDestructiveOp ;
+    rdfs:label "kubectl delete persistentvolume" ;
+    :tool :KubectlTool .
+
+<http://tardygrada.org/delete_crd>          a :KubectlDestructiveOp ;
+    rdfs:label "kubectl delete customresourcedefinition" ;
+    :tool :KubectlTool .

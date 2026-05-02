@@ -16,6 +16,9 @@ Subcommands:
     wrap TARGET|URL      generate a self-contained bundle (adapter +
                           ontology + MCP server + skill) for a known
                           target or a GitHub repo URL
+    onto TARGET|all      run OWL-RL reasoning over a wrapper's
+                          schema.ttl + TARGET.ttl and regenerate the
+                          flat TARGET.nt that tardygrada loads
     git GIT-ARGS         drive git through the verification gate
     kubectl K8S-ARGS     drive kubectl through the verification gate
 
@@ -71,6 +74,9 @@ def main():
         os.execv(target, [target] + rest)
     if sub == "wrap":
         target = os.path.join(BIN, "mcpf-wrap")
+        os.execv(target, [target] + rest)
+    if sub in ("materialize", "materialise", "onto"):
+        target = os.path.join(BIN, "mcpf-materialize")
         os.execv(target, [target] + rest)
     if sub in ("list", "install", "show", "reload"):
         # Registry subcommands — dispatch to mcpf-registry

@@ -1,26 +1,44 @@
-# mcp-former gh (GitHub CLI) domain ontology — bundled tier.
-#
-# Conventions:
-#   protected_repo  — repos/orgs that should never be deleted
-#   destructive_op  — gh subcommand+verb pairs that delete data
+# Materialised by mcpf-materialize
+# Source: schema.ttl
+# Source: gh.ttl
+# Reasoning: rdflib + owlrl OWL-RL profile
+# Stats: 99 schema + 31 A-Box → 475 after reasoning (+345 inferred)
+# Output: 36 flat `is_a` triples (subclass closure included)
+# DO NOT EDIT — regenerate with `mcpf materialize gh`.
 
-# Protected repos / orgs — anything matching these is blocked from
-# destructive operations. Format: <name>_repo or <name>_org. The
-# wrapper normalises hyphens to underscores.
-<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
-<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
-
-# Destructive gh operations
-<http://tardygrada.org/repo_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/secret_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/ssh_key_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/gpg_key_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-<http://tardygrada.org/variable_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/AwsTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/GhTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/GitTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/KubectlTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
+<http://tardygrada.org/PsqlTool> <http://schema.org/is_a> <http://tardygrada.org/tool> .
 <http://tardygrada.org/cache_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/cache_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/cache_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
 <http://tardygrada.org/codespace_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
-
-# Mutating but recoverable (logged for symmetry — not currently gated)
-<http://tardygrada.org/workflow_disable> <http://schema.org/is_a> <http://tardygrada.org/mutating_op> .
-<http://tardygrada.org/pr_close> <http://schema.org/is_a> <http://tardygrada.org/mutating_op> .
+<http://tardygrada.org/codespace_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/codespace_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/gpg_key_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/gpg_key_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/gpg_key_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/issue_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
+<http://tardygrada.org/main_app> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_repo> .
+<http://tardygrada.org/production> <http://schema.org/is_a> <http://tardygrada.org/protected_thing> .
+<http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/release_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/repo_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/repo_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/repo_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/secret_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/secret_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/secret_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/ssh_key_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/ssh_key_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/ssh_key_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
+<http://tardygrada.org/variable_delete> <http://schema.org/is_a> <http://tardygrada.org/destructive_op> .
+<http://tardygrada.org/variable_delete> <http://schema.org/is_a> <http://tardygrada.org/gh_destructive_op> .
+<http://tardygrada.org/variable_delete> <http://schema.org/is_a> <http://tardygrada.org/operation> .
