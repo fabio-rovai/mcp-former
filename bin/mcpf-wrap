@@ -277,24 +277,45 @@ LLM_SYSTEM = (
 )
 
 
-def _build_user_prompt(target, binary, help_text, readme_text):
+def _build_user_prompt(target, binary, help_text, readme_text,
+                         surface_text=None):
     help_text = (help_text or "")[:6000]
     readme_text = (readme_text or "")[:8000]
+    surface_text = (surface_text or "")[:6000]
+
+    # The extracted surface (cobra/clap/click definitions from source)
+    # is treated as MORE AUTHORITATIVE than the README, since READMEs
+    # often skip undocumented commands or use marketing language.
+    sources = []
+    if surface_text:
+        sources.append(
+            "AUTHORITATIVE — extracted directly from CLI framework "
+            "definitions in source code (cobra/clap/click/commander). "
+            "Treat this as the ground truth for the tool's surface "
+            "area:\n\n" + surface_text)
+    if help_text:
+        sources.append(f"--help output (truncated to 6KB):\n{help_text}")
+    if readme_text:
+        sources.append(
+            f"README excerpt — descriptive only, may be incomplete or "
+            f"out of date (truncated to 8KB):\n{readme_text}")
+
+    if not sources:
+        sources.append("(no source material available)")
+
     return f"""Generate a protection-model ontology for the CLI tool `{binary}`.
 
 Tool name (for IRI subjects): {target}
 
---help output (truncated to 6KB):
-{help_text or '(unavailable)'}
-
-README excerpt (truncated to 8KB):
-{readme_text or '(unavailable)'}
+{chr(10).join(f'### Source {i+1}{chr(10)}{s}' for i, s in enumerate(sources))}
 
 Emit N-Triples facts marking destructive operations and protected
 resources. Cover both flag-level operations (e.g. push_force for
 `git push --force`) and subcommand-level (delete, drop, truncate,
-terminate, etc.). If the tool clearly has no destructive operations
-(read-only utility), emit only a header comment."""
+terminate, etc.). Prefer source-extracted subcommand names over
+README descriptions when they conflict. If the tool clearly has no
+destructive operations (read-only utility), emit only a header
+comment."""
 
 
 def _strip_fences(text):
@@ -303,12 +324,14 @@ def _strip_fences(text):
         flags=re.MULTILINE)
 
 
-def _generate_via_api(target, binary, help_text, readme_text):
+def _generate_via_api(target, binary, help_text, readme_text,
+                        surface_text=None):
     """Call Anthropic API directly. Needs ANTHROPIC_API_KEY."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return None, "no ANTHROPIC_API_KEY in env"
-    user = _build_user_prompt(target, binary, help_text, readme_text)
+    user = _build_user_prompt(target, binary, help_text, readme_text,
+                                surface_text)
     body = json.dumps({
         "model": LLM_MODEL,
         "max_tokens": 2048,
@@ -340,13 +363,15 @@ def _generate_via_api(target, binary, help_text, readme_text):
     return _strip_fences(resp["content"][0]["text"]), None
 
 
-def _generate_via_claude_cli(target, binary, help_text, readme_text):
+def _generate_via_claude_cli(target, binary, help_text, readme_text,
+                                surface_text=None):
     """Shell out to `claude -p` — uses the user's existing Claude Code
     session, no API key needed. The prompt goes via stdin to avoid
     flag-parsing collisions on long multi-line content."""
     if not shutil.which("claude"):
         return None, "claude CLI not on PATH"
-    user = _build_user_prompt(target, binary, help_text, readme_text)
+    user = _build_user_prompt(target, binary, help_text, readme_text,
+                                surface_text)
     cmd = [
         "claude", "-p",
         "--output-format", "text",
@@ -367,21 +392,23 @@ def _generate_via_claude_cli(target, binary, help_text, readme_text):
 
 
 def llm_generate_ontology(target, binary, help_text, readme_text,
-                            backend="auto"):
+                            backend="auto", surface_text=None):
     """Generate ontology via the chosen backend.
        backend in {auto, api, claude-cli}.
        'auto': try API if key set, else claude CLI, else fail."""
     if backend == "api":
-        return _generate_via_api(target, binary, help_text, readme_text)
+        return _generate_via_api(target, binary, help_text, readme_text,
+                                    surface_text)
     if backend == "claude-cli":
         return _generate_via_claude_cli(target, binary, help_text,
-                                          readme_text)
+                                          readme_text, surface_text)
     # auto
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return _generate_via_api(target, binary, help_text, readme_text)
+        return _generate_via_api(target, binary, help_text, readme_text,
+                                    surface_text)
     if shutil.which("claude"):
         return _generate_via_claude_cli(target, binary, help_text,
-                                          readme_text)
+                                          readme_text, surface_text)
     return None, "no LLM backend available (set ANTHROPIC_API_KEY or install claude CLI)"
 
 
@@ -504,6 +531,157 @@ def fetch_readme(repo_root):
             except Exception:
                 pass
     return None
+
+
+# ----------------------------------------------------------------------
+# Source-level CLI surface extraction.
+#
+# README is marketing copy in many repos — it skips undocumented
+# commands, uses outdated examples, and hides destructive operations
+# behind euphemisms. The CLI definition framework is more factual:
+# every Go binary using cobra has `cobra.Command{Use: "delete", ...}`
+# entries; every Rust binary using clap has `Command::new("delete")`;
+# every Python click has `@click.command(name="delete")`. Grepping
+# these patterns gives us the actual surface area, not what the
+# author wished it looked like.
+# ----------------------------------------------------------------------
+
+# Cobra: `Use:` field appears anywhere in the codebase. Simple pattern
+# wins over trying to parse the whole struct literal — false positives
+# are filtered later by length and exclusion list.
+GO_COBRA_USE_RE = re.compile(
+    r'^\s*Use:\s*"([a-zA-Z][\w-]+)"', re.MULTILINE)
+GO_COBRA_SHORT_RE = re.compile(
+    r'^\s*Short:\s*"([^"]+)"', re.MULTILINE)
+
+# mitchellh/cli — used by terraform, packer, vault. Pattern:
+#   "destroy": func() (cli.Command, error) { return &DestroyCommand{...
+GO_MITCHELLH_RE = re.compile(
+    r'^\s*"([a-z][\w-]+)":\s*func\(\)\s*\(cli\.Command,\s*error\)',
+    re.MULTILINE)
+
+RUST_CLAP_RE = re.compile(
+    r'(?:Command::new\(\s*"([a-zA-Z][\w-]*)"|'
+    r'(?:SubCommand::with_name|App::new)\(\s*"([a-zA-Z][\w-]*)"|'
+    r'#\[command\([^)]*name\s*=\s*"([a-zA-Z][\w-]*)")')
+
+PY_CLICK_RE = re.compile(
+    r'@(?:click|app)\.(?:command|group)\(\s*(?:name\s*=\s*)?["\']'
+    r'([a-zA-Z][\w-]*)["\']')
+
+# Generic argparse subparser: ap.add_parser("delete", ...)
+PY_ARGPARSE_RE = re.compile(
+    r'(?:add_parser|add_subparser)\(\s*["\']'
+    r'([a-zA-Z][\w-]*)["\']')
+
+NODE_COMMANDER_RE = re.compile(
+    r'\.command\(\s*["\']([a-zA-Z][\w-]*(?:\s+[<\[][^"\']+)?)["\']')
+
+# Filter out common false positives from generic Use:/Short: matches
+COBRA_FALSE_POSITIVES = {
+    "use", "TestMain", "main", "init", "run",
+    # Test fixture names
+    "test", "example",
+}
+
+
+def extract_surface(repo_root):
+    """Walk the repo, looking for CLI definition patterns. Returns
+    a dict mapping framework → list of subcommand names + a short
+    extracted description if available."""
+    found = {}
+
+    # Cap size: don't scan repos bigger than 10k files (huge monorepos
+    # would tank performance) and skip obvious non-source dirs.
+    SKIP_DIRS = {".git", "node_modules", "vendor", "target", "dist",
+                 "build", "__pycache__", ".venv", "venv", "out"}
+    SCAN_EXTS = {".go", ".rs", ".py", ".js", ".ts"}
+
+    file_count = 0
+    for root, dirs, files in os.walk(repo_root):
+        # Prune skip dirs
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for fname in files:
+            if file_count > 5000:
+                break
+            ext = os.path.splitext(fname)[1]
+            if ext not in SCAN_EXTS:
+                continue
+            file_count += 1
+            path = os.path.join(root, fname)
+            try:
+                with open(path, "r", encoding="utf-8",
+                          errors="replace") as f:
+                    text = f.read()
+            except Exception:
+                continue
+
+            if ext == ".go":
+                # Skip test files — fixtures inflate the surface
+                if fname.endswith("_test.go"):
+                    continue
+                # Cobra: pair Use: with neighbouring Short: line
+                use_matches = list(GO_COBRA_USE_RE.finditer(text))
+                short_matches = list(GO_COBRA_SHORT_RE.finditer(text))
+                for um in use_matches:
+                    name = um.group(1).split()[0]   # "list" from "list <args>"
+                    if name in COBRA_FALSE_POSITIVES:
+                        continue
+                    # Find the Short: line within ~10 lines after Use:
+                    short = ""
+                    for sm in short_matches:
+                        if 0 < sm.start() - um.start() < 600:
+                            short = sm.group(1)[:120]
+                            break
+                    found.setdefault("cobra", []).append((name, short))
+                # mitchellh/cli (terraform, vault, packer)
+                for m in GO_MITCHELLH_RE.finditer(text):
+                    found.setdefault("mitchellh-cli", []).append(
+                        (m.group(1), ""))
+            elif ext == ".rs":
+                for m in RUST_CLAP_RE.finditer(text):
+                    name = m.group(1) or m.group(2) or m.group(3)
+                    if name:
+                        found.setdefault("clap", []).append((name, ""))
+            elif ext == ".py":
+                for m in PY_CLICK_RE.finditer(text):
+                    found.setdefault("click", []).append((m.group(1), ""))
+                for m in PY_ARGPARSE_RE.finditer(text):
+                    cmd = m.group(1)
+                    if not cmd.startswith("--"):
+                        found.setdefault("argparse", []).append(
+                            (cmd, ""))
+            elif ext in (".js", ".ts"):
+                for m in NODE_COMMANDER_RE.finditer(text):
+                    found.setdefault("commander", []).append(
+                        (m.group(1).split()[0], ""))
+
+    # Dedup per framework, preserve first description seen
+    cleaned = {}
+    for fw, entries in found.items():
+        seen = {}
+        for name, desc in entries:
+            if name not in seen or (desc and not seen[name]):
+                seen[name] = desc
+        cleaned[fw] = sorted(seen.items())
+    return cleaned
+
+
+def render_surface(surface, max_per_framework=80):
+    """Format the extracted surface for the LLM prompt."""
+    if not surface:
+        return None
+    out = []
+    for fw, entries in surface.items():
+        out.append(f"## CLI surface ({fw}, {len(entries)} subcommands)")
+        for name, desc in entries[:max_per_framework]:
+            if desc:
+                out.append(f"  {name:24s}  {desc}")
+            else:
+                out.append(f"  {name}")
+        if len(entries) > max_per_framework:
+            out.append(f"  … and {len(entries) - max_per_framework} more")
+    return "\n".join(out)
 
 
 # ----------------------------------------------------------------------
@@ -857,6 +1035,22 @@ def build_repo_bundle(url, out_dir, llm_backend="auto"):
     if readme_text:
         print(f"{DIM}got README ({len(readme_text)} bytes){NC}")
 
+    # Extract the actual CLI surface from the source — more
+    # authoritative than README, which often skips undocumented
+    # commands or uses marketing language.
+    print(f"{DIM}scanning source for cobra/clap/click definitions…{NC}")
+    surface = extract_surface(clone_dir)
+    surface_text = render_surface(surface)
+    if surface:
+        total = sum(len(v) for v in surface.values())
+        framework_summary = ", ".join(
+            f"{fw}={len(v)}" for fw, v in surface.items())
+        print(f"{DIM}extracted CLI surface: {total} subcommands "
+              f"({framework_summary}){NC}")
+    else:
+        print(f"{YELLOW}no recognised CLI framework patterns "
+              f"(cobra/clap/click) — falling back to README only{NC}")
+
     out = Path(out_dir)
     (out / "bin").mkdir(parents=True, exist_ok=True)
     (out / "ontologies").mkdir(parents=True, exist_ok=True)
@@ -870,7 +1064,8 @@ def build_repo_bundle(url, out_dir, llm_backend="auto"):
     print(f"{DIM}generating ontology via LLM (backend: "
           f"{llm_backend})…{NC}")
     nt_text, err = llm_generate_ontology(
-        target, binary, help_text, readme_text, backend=llm_backend)
+        target, binary, help_text, readme_text,
+        backend=llm_backend, surface_text=surface_text)
     if not nt_text:
         shutil.rmtree(out, ignore_errors=True)
         raise RuntimeError(
