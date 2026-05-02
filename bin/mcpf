@@ -3,6 +3,9 @@
 mcpf — top-level CLI for mcp-former.
 
 Subcommands:
+    list                 list wrappers in the registry
+    install NAME         install a wrapper bundle into ./wrappers/NAME
+    show NAME            show full registry record for NAME
     plan TARGET          introspect target software, emit a Terraform-
                           style plan against ontologies/TARGET.nt
     apply TARGET         run plan and write the result to disk
@@ -64,6 +67,13 @@ def main():
         os.execv(target, [target] + rest)
     if sub == "wrap":
         target = os.path.join(BIN, "mcpf-wrap")
+        os.execv(target, [target] + rest)
+    if sub in ("list", "install", "show"):
+        # Registry subcommands — dispatch to mcpf-registry
+        target = os.path.join(BIN, "mcpf-registry")
+        os.execv(target, [target, sub] + rest)
+    if sub == "registry":
+        target = os.path.join(BIN, "mcpf-registry")
         os.execv(target, [target] + rest)
 
     print(f"unknown subcommand: {sub}", file=sys.stderr)

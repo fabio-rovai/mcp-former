@@ -327,6 +327,110 @@ h1 {
   font-style: italic;
 }
 
+/* --- registry grid --- */
+
+.registry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.reg-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  transition: border-color 120ms;
+}
+
+.reg-card:hover {
+  border-color: var(--accent-dim);
+}
+
+.reg-card .reg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.reg-card .reg-name {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.reg-card .reg-version {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.reg-card .reg-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.reg-card .reg-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.reg-card .reg-cat {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: rgba(92, 225, 230, 0.1);
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+.reg-card details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.reg-card details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.reg-card details summary:hover {
+  color: var(--text);
+}
+
+.reg-card .reg-gates {
+  margin-top: 8px;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+
+.reg-card .reg-gates li {
+  margin: 3px 0;
+}
+
+.reg-card .reg-install {
+  margin-top: 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
 /* --- output --- */
 
 .output-card .output-head {

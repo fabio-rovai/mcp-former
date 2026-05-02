@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "registry_version": "0.1.0",
+  "description": "mcp-former wrapper registry — verified MCP wrappers for legacy software.",
+  "homepage": "https://github.com/fabio-rovai/mcp-former",
+  "wrappers": [
+    {
+      "name": "git",
+      "version": "0.1.0",
+      "description": "Distributed version control",
+      "binary": "git",
+      "tier": "bundled",
+      "categories": ["scm", "core"],
+      "gated_subcommands": [
+        "branch -d/-D NAME (rejects protected_branch)",
+        "push --force (rejects push_force)",
+        "reset --hard (rejects reset_hard)",
+        "clean -f (rejects clean_force)",
+        "checkout -- PATH (rejects checkout_discard)"
+      ],
+      "ontology_facts": 11,
+      "adapter_path": "bin/mcpf-git",
+      "ontology_path": "ontologies/git.nt"
+    },
+    {
+      "name": "kubectl",
+      "version": "0.1.0",
+      "description": "Kubernetes cluster CLI",
+      "binary": "kubectl",
+      "tier": "bundled",
+      "categories": ["k8s", "infra"],
+      "gated_subcommands": [
+        "delete (rejects protected_namespace, protected_resource, --all)",
+        "drain (rejects drain)",
+        "cordon (rejects cordon)",
+        "apply --force (rejects apply_force)",
+        "replace --force (rejects replace_force)"
+      ],
+      "ontology_facts": 19,
+      "adapter_path": "bin/mcpf-kubectl",
+      "ontology_path": "ontologies/kubectl.nt"
+    },
+    {
+      "name": "gh",
+      "version": "0.1.0",
+      "description": "GitHub CLI",
+      "binary": "gh",
+      "tier": "bundled",
+      "categories": ["scm", "github"],
+      "gated_subcommands": [
+        "repo delete (rejects repo_delete + protected_repo)",
+        "release delete",
+        "issue delete",
+        "secret delete",
+        "ssh-key delete",
+        "gpg-key delete",
+        "variable delete",
+        "cache delete",
+        "codespace delete"
+      ],
+      "ontology_facts": 13,
+      "adapter_path": "bin/mcpf-gh",
+      "ontology_path": "ontologies/gh.nt"
+    },
+    {
+      "name": "aws",
+      "version": "0.1.0",
+      "description": "AWS CLI (pattern-based across all 200+ services)",
+      "binary": "aws",
+      "tier": "bundled",
+      "categories": ["cloud", "infra"],
+      "gated_subcommands": [
+        "* terminate-* (rejects terminate-instances etc.)",
+        "* delete-* (rejects delete-db-instance, delete-bucket, etc.)",
+        "s3 rb --force",
+        "s3 rm --recursive",
+        "route53 * (rejects entire protected_service)"
+      ],
+      "ontology_facts": 23,
+      "adapter_path": "bin/mcpf-aws",
+      "ontology_path": "ontologies/aws.nt"
+    },
+    {
+      "name": "psql",
+      "version": "0.1.0",
+      "description": "PostgreSQL CLI (gates SQL statements, not just CLI flags)",
+      "binary": "psql",
+      "tier": "bundled",
+      "categories": ["db", "sql"],
+      "gated_subcommands": [
+        "DROP DATABASE / SCHEMA / TABLE / ROLE / USER / EXTENSION",
+        "TRUNCATE",
+        "DELETE without WHERE",
+        "UPDATE without WHERE",
+        "GRANT SUPERUSER / ALTER ROLE WITH SUPERUSER"
+      ],
+      "ontology_facts": 18,
+      "adapter_path": "bin/mcpf-psql",
+      "ontology_path": "ontologies/psql.nt"
+    }
+  ]
+}

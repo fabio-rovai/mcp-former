@@ -58,8 +58,54 @@ $$(".tab").forEach((t) => {
       "active", x.dataset.tab === t.dataset.tab));
     $$(".tab-panel").forEach((p) => p.classList.toggle(
       "hidden", p.id !== `tab-${t.dataset.tab}`));
+    if (t.dataset.tab === "registry") loadRegistryFull();
   });
 });
+
+// --- full registry tab ---------------------------------------------
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+let registryFullLoaded = false;
+async function loadRegistryFull() {
+  if (registryFullLoaded) return;
+  const r = await fetch("/api/registry/index");
+  if (!r.ok) {
+    $("#registry-list").innerHTML =
+      `<div class="preset-loading">registry unavailable (${r.status})</div>`;
+    return;
+  }
+  const data = await r.json();
+  const wrap = $("#registry-list");
+  wrap.innerHTML = "";
+  for (const w of data.wrappers) {
+    const cats = (w.categories || [])
+      .map(c => `<span class="reg-cat">${escapeHtml(c)}</span>`).join("");
+    const gates = (w.gated_subcommands || [])
+      .map(g => `<li>${escapeHtml(g)}</li>`).join("");
+    const card = document.createElement("div");
+    card.className = "reg-card";
+    card.innerHTML = `
+      <div class="reg-head">
+        <span class="reg-name">${escapeHtml(w.name)}</span>
+        <span class="reg-version">v${escapeHtml(w.version)}</span>
+      </div>
+      <p class="reg-desc">${escapeHtml(w.description)}</p>
+      <div class="reg-meta">${cats}</div>
+      <details>
+        <summary>${(w.gated_subcommands || []).length} gated operations · ${w.ontology_facts || 0} facts</summary>
+        <ul class="reg-gates">${gates}</ul>
+      </details>
+      <div class="reg-install">$ mcpf install ${escapeHtml(w.name)}</div>
+    `;
+    wrap.appendChild(card);
+  }
+  registryFullLoaded = true;
+}
 
 // --- registry + presets ---------------------------------------------
 

@@ -110,6 +110,9 @@ async def index():
     return (STATIC / "index.html").read_text()
 
 
+REGISTRY_INDEX_PATH = ROOT / "registry" / "index.json"
+
+
 @app.get("/api/registry")
 async def registry():
     """Return bundled wrapper list, filtered to those whose adapter
@@ -126,6 +129,16 @@ async def registry():
                           else "stub")
         available.append(out)
     return {"wrappers": available}
+
+
+@app.get("/api/registry/index")
+async def registry_index():
+    """Return the full registry index.json (wrapper metadata, versions,
+    categories, gated_subcommands list per wrapper)."""
+    if not REGISTRY_INDEX_PATH.exists():
+        raise HTTPException(status_code=404,
+                             detail="registry index missing")
+    return JSONResponse(json.loads(REGISTRY_INDEX_PATH.read_text()))
 
 
 def sse(event, data):

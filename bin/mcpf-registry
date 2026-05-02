@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""
+mcpf registry — list and install wrappers from a registry index.
+
+Today the registry is local (registry/index.json in this repo).
+Future: a hosted index URL with versioning + signing.
+
+Subcommands:
+
+    mcpf list                   show available wrappers
+    mcpf install NAME           install wrapper NAME's bundle into ./wrappers/NAME/
+    mcpf install NAME --to DIR  custom install location
+    mcpf show NAME              show full registry record
+
+Examples:
+
+    mcpf list
+    mcpf install git
+    mcpf install kubectl --to ~/mcpf/kubectl
+"""
+import argparse
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+REGISTRY_INDEX = ROOT / "registry" / "index.json"
+
+GREEN  = "\033[0;32m"
+YELLOW = "\033[1;33m"
+RED    = "\033[0;31m"
+DIM    = "\033[2m"
+CYAN   = "\033[0;36m"
+NC     = "\033[0m"
+
+
+def load_index():
+    if not REGISTRY_INDEX.exists():
+        print(f"{RED}registry index missing: {REGISTRY_INDEX}{NC}",
+              file=sys.stderr)
+        sys.exit(1)
+    return json.loads(REGISTRY_INDEX.read_text())
+
+
+def cmd_list(args):
+    idx = load_index()
+    print(f"{DIM}{idx['description']}{NC}")
+    print(f"{DIM}registry v{idx['registry_version']}, "
+          f"{len(idx['wrappers'])} wrappers available{NC}\n")
+
+    name_w = max(len(w["name"]) for w in idx["wrappers"])
+    for w in idx["wrappers"]:
+        cats = ", ".join(w.get("categories", []))
+        print(f"  {CYAN}{w['name']:{name_w}s}{NC}  "
+              f"{DIM}v{w['version']:6s}  "
+              f"{w['description']:48s}  "
+              f"[{cats}]{NC}")
+    print(f"\n  {DIM}Run `mcpf install <name>` to add a wrapper to "
+          f"the current directory.{NC}")
+    return 0
+
+
+def cmd_show(args):
+    idx = load_index()
+    for w in idx["wrappers"]:
+        if w["name"] == args.name:
+            print(json.dumps(w, indent=2))
+            return 0
+    print(f"{RED}wrapper not found: {args.name}{NC}", file=sys.stderr)
+    return 2
+
+
+def cmd_install(args):
+    idx = load_index()
+    entry = next((w for w in idx["wrappers"] if w["name"] == args.name), None)
+    if not entry:
+        print(f"{RED}unknown wrapper: {args.name}{NC}", file=sys.stderr)
+        print(f"  available: {', '.join(w['name'] for w in idx['wrappers'])}",
+              file=sys.stderr)
+        return 2
+
+    adapter_src = ROOT / entry["adapter_path"]
+    ontology_src = ROOT / entry["ontology_path"]
+    if not adapter_src.exists() or not ontology_src.exists():
+        print(f"{RED}wrapper assets missing in this checkout:{NC}",
+              file=sys.stderr)
+        print(f"  expected: {adapter_src}, {ontology_src}", file=sys.stderr)
+        return 1
+
+    # Default install location: ./wrappers/<name>/
+    target_dir = Path(args.to) if args.to else (
+        Path.cwd() / "wrappers" / args.name)
+    (target_dir / "bin").mkdir(parents=True, exist_ok=True)
+    (target_dir / "ontologies").mkdir(parents=True, exist_ok=True)
+
+    shutil.copy(adapter_src, target_dir / "bin" / adapter_src.name)
+    os.chmod(target_dir / "bin" / adapter_src.name, 0o755)
+    shutil.copy(ontology_src, target_dir / "ontologies" / ontology_src.name)
+
+    # Generate the MCP server + skill via mcpf-wrap on the same target.
+    # mcpf-wrap --out <dir> already writes the full bundle layout.
+    import subprocess
+    wrap_bin = ROOT / "bin" / "mcpf-wrap"
+    if wrap_bin.exists():
+        # Run mcpf-wrap into a temp dir, then copy the generated
+        # mcp_server.py + skill.md + README.md across.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            r = subprocess.run(
+                [str(wrap_bin), entry["name"], "--out", tmp],
+                capture_output=True, text=True)
+            if r.returncode == 0:
+                for fname in ("mcp_server.py", "skill.md", "README.md"):
+                    src = Path(tmp) / fname
+                    if src.exists():
+                        shutil.copy(src, target_dir / fname)
+                if (target_dir / "mcp_server.py").exists():
+                    os.chmod(target_dir / "mcp_server.py", 0o755)
+
+    print(f"{GREEN}✓ installed {entry['name']} v{entry['version']} → "
+          f"{target_dir}{NC}")
+    print(f"  {DIM}adapter:    bin/{adapter_src.name}{NC}")
+    print(f"  {DIM}ontology:   ontologies/{ontology_src.name} "
+          f"({entry.get('ontology_facts', '?')} facts){NC}")
+    if (target_dir / "mcp_server.py").exists():
+        print(f"  {DIM}MCP server: mcp_server.py{NC}")
+        print(f"  {DIM}skill:      skill.md{NC}")
+    print(f"\n  {DIM}Next: load the ontology into tardygrada and wire "
+          f"the MCP server into your client. See README.md.{NC}")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("list", help="list available wrappers")
+
+    p_show = sub.add_parser("show", help="show full registry record")
+    p_show.add_argument("name")
+
+    p_inst = sub.add_parser("install", help="install a wrapper")
+    p_inst.add_argument("name")
+    p_inst.add_argument("--to", default=None,
+        help="install location (default ./wrappers/<name>)")
+
+    args = ap.parse_args()
+
+    if args.cmd == "list":     return cmd_list(args)
+    if args.cmd == "show":     return cmd_show(args)
+    if args.cmd == "install":  return cmd_install(args)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

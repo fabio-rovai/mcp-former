@@ -40,6 +40,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="builtin">Built-in target</button>
       <button class="tab" data-tab="url">GitHub URL</button>
+      <button class="tab" data-tab="registry">Registry</button>
     </div>
 
     <div class="tab-panel" id="tab-builtin">
@@ -94,6 +95,18 @@
         <span class="hint" id="hint-url">
           paste a public github.com URL above
         </span>
+      </div>
+    </div>
+
+    <div class="tab-panel hidden" id="tab-registry">
+      <h3>Wrapper registry</h3>
+      <p class="lede" style="font-size: 14px; margin-top: 0;">
+        Verified MCP wrappers shipped with mcp-former. Click a card
+        for the full record; use <code>mcpf install NAME</code> on
+        the CLI to materialise a bundle locally.
+      </p>
+      <div id="registry-list" class="registry-grid">
+        <div class="preset-loading">loading…</div>
       </div>
     </div>
   </section>
