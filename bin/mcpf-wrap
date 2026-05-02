@@ -447,6 +447,51 @@ def validate_ontology(text):
         return False, f"validator error: {e}"
 
 
+def submit_bundle_ontology_to_daemon(bundle_dir):
+    """Push the bundle's ontology facts to the running tardygrada
+    daemon so the wrap-time audit can ground against them. Without
+    this, audit ALWAYS fails grounding for fresh bundles. Skipped
+    silently if the daemon isn't running."""
+    sock = "/tmp/tardygrada.sock"
+    if not os.path.exists(sock):
+        return None, "tardygrada daemon not running"
+    nt_files = list((bundle_dir / "ontologies").glob("*.nt"))
+    if not nt_files:
+        return None, "no .nt file in bundle"
+
+    import socket as _sock
+    NT = re.compile(
+        r'^<[^>]*org/(?P<s>[^>]+)>\s+<[^>]*org/(?P<p>[^>]+)>\s+'
+        r'<[^>]*org/(?P<o>[^>]+)>\s*\.\s*$')
+    counts = {"accepted": 0, "duplicate": 0, "other": 0}
+    for nt_path in nt_files:
+        for line in nt_path.read_text().splitlines():
+            m = NT.match(line.strip())
+            if not m:
+                continue
+            try:
+                s = _sock.socket(_sock.AF_UNIX); s.connect(sock)
+                s.sendall((json.dumps({
+                    "cmd": "submit-fact",
+                    "subject": m.group("s"),
+                    "predicate": m.group("p"),
+                    "object": m.group("o"),
+                }) + "\n").encode())
+                s.shutdown(_sock.SHUT_WR)
+                buf = b""
+                while True:
+                    chunk = s.recv(4096)
+                    if not chunk: break
+                    buf += chunk
+                s.close()
+                resp = json.loads(buf.decode().strip())
+                st = resp.get("status", "other")
+                counts[st] = counts.get(st, 0) + 1
+            except Exception:
+                counts["other"] += 1
+    return counts, None
+
+
 def run_audit_and_save(bundle_dir):
     """Shell out to mcpf-audit on the freshly-wrapped bundle and save
     the JSON output as bundle/AUDIT.md. Doesn't fail the wrap on audit
@@ -1375,8 +1420,20 @@ def main():
 
     # Auto-audit the bundle so the README ships with a conformance
     # report. CI-style: a wrapper without an audit report shouldn't be
-    # trusted in production.
+    # trusted in production. Before the audit, push the freshly
+    # generated facts to the running daemon — otherwise the grounding
+    # check ALWAYS fails for fresh bundles ("facts not loaded yet"),
+    # which is misleading. After this, the audit reflects what the
+    # bundle can actually do once installed.
     if not args.no_audit:
+        sub_counts, sub_err = submit_bundle_ontology_to_daemon(out)
+        if sub_counts and sub_counts["accepted"] + sub_counts["duplicate"] > 0:
+            n = sub_counts["accepted"]
+            d = sub_counts["duplicate"]
+            print(f"{DIM}↳ pre-loaded {n} new + {d} duplicate "
+                  f"facts into the daemon for the audit{NC}")
+        elif sub_err:
+            print(f"{DIM}↳ {sub_err} — audit will skip grounding{NC}")
         run_audit_and_save(out)
 
     if args.zip:
