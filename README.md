@@ -1,5 +1,7 @@
 # mcp-former
 
+[![Sponsor](https://img.shields.io/github/sponsors/fabio-rovai?label=Sponsor&logo=GitHub%20Sponsors&logoColor=EA4AAA&color=EA4AAA)](https://github.com/sponsors/fabio-rovai)
+
 **Terraform for legacy software → AI agents.**
 
 mcp-former wraps existing software (CLIs, APIs, libraries) behind a
@@ -212,3 +214,9 @@ TBD (likely Apache 2.0).
   verification engine mcp-former depends on.
 - [open-ontologies](https://github.com/fabio-rovai/open-ontologies) —
   ontology research.
+
+---
+
+## Sponsor
+
+If this work is useful to you, you can support its continued development through [GitHub Sponsors](https://github.com/sponsors/fabio-rovai).
